@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+*.log
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Data/output folders (adjust to your reality)
+data/
+output/
+results/
+*.csv
+*.txt
+*.dat
+
+# If you use these
+*.png
+*.pdf
