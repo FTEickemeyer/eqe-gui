@@ -9,8 +9,8 @@ import csv
 import os
 
 # --- Instrument and libraries ---
-import EQE_main_v1_11 as EQE
-import MMF_v02 as MMF
+from eqe.core import eqe_main_legacy as EQE
+from eqe.analysis import mmf_legacy as MMF
 from FTE_analysis_libraries import Spectrum as spc
 
 #plt.ion()
