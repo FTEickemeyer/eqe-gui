@@ -11,6 +11,7 @@ from pathlib import Path
 
 from eqe.config.config_loader import load_config
 from eqe.core.models import MeasurementParams
+from eqe.analysis.calibration import open_calibration
 
 # --- Instrument and libraries ---
 from eqe.core import eqe_main_legacy as EQE
@@ -403,7 +404,7 @@ def start_measurement():
 
         mono.filter = mono.filter_wheel_position
 
-        df_incbeamcurr, df_ref = EQE.open_calibration(
+        df_incbeamcurr, df_ref = open_calibration(
             system_dir,
             nm_lim,
             calibration_measurement,

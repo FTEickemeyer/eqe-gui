@@ -592,33 +592,7 @@ class SMU:
     def close(self):
         self.inst.close()
 
-def df_interpolate(df, new_index_arr):
-    """
-    Generates an interpolated dataframe, where the index of df is replaced by new_index_arr.
 
-    Parameters
-    ----------
-    df : pandas dataframe
-        The dataframe to be interpolated.
-    new_index_arr : numpy array
-        The new index.
-
-    Returns
-    -------
-    pandas dataframeL
-        with new index.
-
-    """
-    lower_limit = min(df.index.values)
-    upper_limit = max(df.index.values)
-    new_index_arr = new_index_arr[new_index_arr >= lower_limit]
-    new_index_arr = new_index_arr[new_index_arr <= upper_limit]
-    r = pd.Index(new_index_arr)
-    t = df.index
-    df_new = df.reindex(t.union(r)).interpolate(method='quadratic', axis='index').loc[r]
-    df_new.index.name = df.index.name
-    df_new.index = df_new.index.astype(type(new_index_arr[0]))
-    return df_new
 
 def measure_stabilized_LIA_signal(LIA, timeout=20):
     start_time = time.time()
@@ -672,37 +646,6 @@ def create_user_directory(data_dir, user, debug=False):
         os.makedirs(user_dir)
     return user_dir
 
-
-def open_calibration(system_dir, nm_lim, calibration_measurement, debug=False):
-    fp_ref_cell = os.path.join(system_dir, '71889_L_IPCE_NIST.csv')
-    df_ref = pd.read_csv(fp_ref_cell).set_index('Wavelength (nm)').squeeze()
-    if debug:
-        df_ref.plot()
-        plt.title('Reference cell')
-        plt.ylabel('IPCE (%)')
-        plt.show()
-
-    if not calibration_measurement:
-        FN_root = 'incbeamcurr'
-        FNs = os.listdir(system_dir)
-        FN_incbeamcurr = [FN for FN in FNs if (FN_root in FN) and (f'{grating_change_nm}' in FN)][-1]
-        if debug:
-            print(FN_incbeamcurr)
-        fp_incbeamcurr = os.path.join(system_dir, FN_incbeamcurr)
-        df_incbeamcurr = pd.read_csv(fp_incbeamcurr).set_index('Wavelength (nm)')
-        #Interpolate an a nm level
-        nm_arr = np.arange(nm_lim[0], nm_lim[1]+1, 1) 
-        df_incbeamcurr = df_interpolate(df_incbeamcurr, nm_arr)
-        if debug:
-            df_incbeamcurr.plot()
-            plt.show()
-            df_incbeamcurr['incident beam current (A)/intSiref current (A)'].plot()
-            plt.title('df_incbeamcurr')
-            plt.show()
-    else:
-        df_incbeamcurr = None
-
-    return df_incbeamcurr, df_ref
 
 
 def initialize_system(mono, smu, N=500, nplc=0.01, interval=0.001):
