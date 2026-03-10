@@ -21,6 +21,8 @@ import pyvisa
 from FTE_analysis_libraries import General as gen
 from FTE_analysis_libraries import Spectrum as spc
 
+trapz = getattr(np, "trapz", np.trapezoid)
+
 Response = namedtuple('Response', ['statement', 'response'])
 grating_change_nm = 850 #680
 
@@ -88,9 +90,15 @@ class Cornerstone130:
 
     def __del__(self):
         """
-        Closes serial port connection.
+        Closes serial port connection safely during object destruction.
         """
-        self._com.close()
+        com = self.__dict__.get("_com", None)
+        if com is not None:
+            try:
+                if com.is_open:
+                    com.close()
+            except Exception:
+                pass
 
 
     def __getattr__(self, attr: str):
@@ -711,33 +719,31 @@ def open_calibration(system_dir, nm_lim, calibration_measurement, debug=False):
 
 def initialize_system(mono, smu, N=500, nplc=0.01, interval=0.001):
 
-    try:
-        mono.close()
-    except:
-        if 'mono' in globals():
-            print('Could not close mono.')
-    try:
-        smu.close()
-    except:
-        if 'smu' in globals():
-            print('Could not close smu.')
+    # Try closing previous handles if they exist
+    if mono is not None:
+        try:
+            mono.close()
+        except Exception:
+            print("Could not close previous monochromator connection.")
 
-    #Initialize monochromator
-    try:
-        mono = Cornerstone130('COM2', grating_change_nm=grating_change_nm)
-    except:
-        print('Monochromator already connected!')
+    if smu is not None:
+        try:
+            smu.close()
+        except Exception:
+            print("Could not close previous SMU connection.")
+
+    # Initialize monochromator
+    mono = Cornerstone130('COM2', grating_change_nm=grating_change_nm)
     print(mono.info)
 
-    #Initialize Keithley2600
-    smu = SMU(address = "GPIB1::24::INSTR", N=N, nplc=nplc, interval=interval)
+    # Initialize Keithley2600
+    smu = SMU(address="GPIB1::24::INSTR", N=N, nplc=nplc, interval=interval)
     smu.upload_script()
-    #smu.N=500
-    smu.N=500
-    smu.nplc=0.01
-    smu.interval=0.001
-    
-    #Measure dark signal
+    smu.N = 500
+    smu.nplc = 0.01
+    smu.interval = 0.001
+
+    # Measure dark signal
     mono.shutter(True)
     smu.run_dual_measurement()
     smu.chA_dark, smu.chB_dark = smu.get_average()
@@ -745,28 +751,56 @@ def initialize_system(mono, smu, N=500, nplc=0.01, interval=0.001):
     return mono, smu
 
 
-def perform_measurement(mono, smu, df_incbeamcurr, calibration_measurement, nm_lim, delta_nm=10, show_raw_signal=False, gui=None, root=None):
-    #Using Keithley 2600
+def perform_measurement(
+    mono,
+    smu,
+    df_incbeamcurr,
+    calibration_measurement,
+    nm_lim,
+    delta_nm=10,
+    show_raw_signal=False,
+    gui=None,
+    root=None,
+    on_live_update=None,
+    on_status=None,
+    stop_requested=None,
+):
+    # Transitional version:
+    # plotting still uses legacy gui/canvas
+    # live updates / status / stop can use callbacks
+
     if gui is not None:
-        ax_cell = gui['ax_cell']
-        ax_ref = gui['ax_ref']
-        canvas = gui['canvas']
-        live_update_var = gui['live_update_var']
-        stop_flag = gui['stop_flag']
-        stop_when_zero = gui['stop_when_zero'] 
+        ax_cell = gui.get('ax_cell')
+        ax_ref = gui.get('ax_ref')
+        canvas = gui.get('canvas')
+        live_update_var = gui.get('live_update_var')
+        status_var = gui.get('status_var')
+        stop_flag = gui.get('stop_flag')
+        stop_when_zero = gui.get('stop_when_zero', False)
+    else:
+        ax_cell = None
+        ax_ref = None
+        canvas = None
+        live_update_var = None
+        status_var = None
+        stop_flag = None
+        stop_when_zero = False
+
     if calibration_measurement:
         show_IPCE = False
         show_raw_signal = True
     else:
         show_IPCE = True
+
     mono.shutter(True)
-    #wavelength step, has to be integer > 0
-    wavelengths = np.arange(nm_lim[0], nm_lim[1]+delta_nm, delta_nm)
+    wavelengths = np.arange(nm_lim[0], nm_lim[1] + delta_nm, delta_nm)
+
     signal_A_arr = []
     signal_B_arr = []
     IPCE_arr = []
     measured_wavelengths = []
     int_curr_arr = []
+
     if gui is None:
         if show_IPCE and show_raw_signal:
             fig, axes = plt.subplots(1, 2, figsize=(17, 6))
@@ -788,93 +822,169 @@ def perform_measurement(mono, smu, df_incbeamcurr, calibration_measurement, nm_l
         else:
             show_raw_signal = False
             show_IPCE = True
+
+    def emit_live_update(message):
+        if on_live_update is not None:
+            on_live_update(message)
+        elif live_update_var is not None:
+            live_update_var.set(message)
+            if root is not None:
+                try:
+                    root.update_idletasks()
+                except Exception:
+                    pass
+        else:
+            print(message)
+
+    def emit_status(message):
+        if on_status is not None:
+            on_status(message)
+        elif status_var is not None:
+            status_var.set(message)
+            if root is not None:
+                try:
+                    root.update_idletasks()
+                except Exception:
+                    pass
+        elif message:
+            print(message)
+
+    def should_stop():
+        if stop_requested is not None:
+            try:
+                return bool(stop_requested())
+            except Exception:
+                return False
+        if stop_flag is not None:
+            try:
+                return bool(stop_flag.get())
+            except Exception:
+                return False
+        return False
+
+    def plot_data(what, ax_cell=None, ax_ref=None):
+        ax_cell.set_xlabel('Wavelength (nm)')
+
+        if what == 'raw_signal':
+            lns1 = ax_cell.plot(
+                measured_wavelengths, signal_B_arr,
+                marker='o', markersize=10, color='tab:blue', label='test cell'
+            )
+            ax_cell.set_ylabel('Signal cell (A)')
+            if len(signal_B_arr) > 0:
+                ax_cell.set_ylim(bottom=0, top=1.05 * np.min(np.array(signal_B_arr)))
+            if gui is None:
+                ax_cell.set_xlim(nm_lim)
+
+            lns2 = ax_ref.plot(
+                measured_wavelengths, signal_A_arr,
+                marker='o', markersize=2, linewidth=0.5, color='tab:orange', label='ref cell'
+            )
+            ax_ref.set_ylabel('Signal ref. (A)')
+            if len(signal_A_arr) > 0:
+                ax_ref.set_ylim(bottom=0, top=1.05 * np.min(np.array(signal_A_arr)))
+
+            lns = lns1 + lns2
+            labs = [l.get_label() for l in lns]
+            ax_cell.legend(lns, labs, loc=0)
+            ax_cell.set_title('Raw signal')
+
+        elif what == 'IPCE':
+            lns1 = ax_cell.plot(
+                measured_wavelengths, IPCE_arr,
+                marker='o', markersize=10, color='tab:blue', label='EQE'
+            )
+            if gui is None:
+                ax_cell.set_ylabel('EQE (%)')
+                ax_cell.set_xlim(nm_lim)
+
+            if len(IPCE_arr) > 0:
+                ax_cell.set_ylim(bottom=0, top=max(0.01, 1.05 * np.max(np.array(IPCE_arr))))
+
+            lns2 = ax_ref.plot(
+                measured_wavelengths, int_curr_arr,
+                color='tab:orange', linewidth=1.0, label='Integrated current'
+            )
+            if gui is None:
+                ax_ref.set_ylabel('Integrated current (mA/cm2)')
+
+            if len(int_curr_arr) > 0:
+                ax_ref.set_ylim(bottom=0, top=max(0.0001, 1.05 * int_curr_arr[-1]))
+
+            ax_ref.set_ylabel('Integrated current (mA/cm2)')
+            lns = lns1 + lns2
+            labs = [l.get_label() for l in lns]
+            ax_cell.legend(lns, labs)
+
+            if gui is None:
+                ax_cell.set_title('IPCE of test cell')
+
+    trapz_fn = getattr(np, "trapz", np.trapezoid)
+
     for nm in wavelengths:
         try:
-            if gui is not None:
-                if stop_flag is not None and stop_flag.get():
-                    message = 'Measurement stopped by user.'
-                    if live_update_var is not None:
-                        live_update_var.set(message)
-                    else:
-                        print(message)
-                    break
+            if should_stop():
+                emit_live_update('Measurement stopped by user.')
+                break
+
             mono.goto_nm(nm, gui=gui, root=root)
             mono.shutter(False)
-            #wait for 2 s before your first measurement and when the grating has changed at 680 nm
+
             if nm == nm_lim[0] or nm == grating_change_nm:
                 time.sleep(2)
+
             smu.run_dual_measurement()
             smu.chA, smu.chB = smu.get_average()
-            intSiref_current = smu.chA-smu.chA_dark
-            cell_current = smu.chB-smu.chB_dark
+
+            intSiref_current = smu.chA - smu.chA_dark
+            cell_current = smu.chB - smu.chB_dark
+
             if not calibration_measurement:
-                incbeamcurr_div_intSirefcurrent = df_incbeamcurr['incident beam current (A)/intSiref current (A)'].loc[nm]
-                IPCE = cell_current / ( incbeamcurr_div_intSirefcurrent * intSiref_current)
+                incbeamcurr_div_intSirefcurrent = df_incbeamcurr[
+                    'incident beam current (A)/intSiref current (A)'
+                ].loc[nm]
+                IPCE = cell_current / (incbeamcurr_div_intSirefcurrent * intSiref_current)
                 if IPCE < 0.0:
                     IPCE = 0.0
                 IPCE_arr.append(IPCE)
                 current_IPCE_arr = np.array(IPCE_arr)
+
             signal_A_arr.append(intSiref_current)
             signal_B_arr.append(cell_current)
             measured_wavelengths.append(nm)
             current_nm_arr = np.array(measured_wavelengths)
+
             if show_IPCE:
                 if nm > nm_lim[0] and len(current_IPCE_arr) >= 2:
                     try:
-                        sp = spc.diff_spectrum.AM15_nm(left=current_nm_arr[0], right=current_nm_arr[-1], delta=delta_nm)
-                        int_curr = np.trapz(current_IPCE_arr/100 * sp.y * gen.q * 1e3/1e4, dx=delta_nm)
+                        sp = spc.diff_spectrum.AM15_nm(
+                            left=current_nm_arr[0],
+                            right=current_nm_arr[-1],
+                            delta=delta_nm
+                        )
+                        int_curr = trapz_fn(
+                            current_IPCE_arr / 100 * sp.y * gen.q * 1e3 / 1e4,
+                            dx=delta_nm
+                        )
                     except Exception as e:
                         print(f"Integration failed: {e}")
                         int_curr = 0.0
                 else:
                     int_curr = 0.0
                 int_curr_arr.append(int_curr)
+
             if show_raw_signal:
-                message = f'nm = {nm} nm - signal ref. cell (chA) = {intSiref_current:.2e} A - signal test cell (chB) = {cell_current:.2e} A'
-                if live_update_var is not None:
-                    live_update_var.set(message)
-                else:
-                    print(message)
+                emit_live_update(
+                    f'nm = {nm} nm - signal ref. cell (chA) = {intSiref_current:.2e} A '
+                    f'- signal test cell (chB) = {cell_current:.2e} A'
+                )
+
             if show_IPCE:
-                message = f'Wavelength = {nm} nm - IPCE = {IPCE:.1f} %\nIntegrated current = {int_curr:.2f} mA/cm2'
-                if live_update_var is not None:
-                    live_update_var.set(message)
-                else:
-                    print(message)
-        
-            def plot_data(what, ax_cell=None, ax_ref=None):
-                ax_cell.set_xlabel('Wavelength (nm)')
-                if what == 'raw_signal':
-                    lns1 = ax_cell.plot(measured_wavelengths, signal_B_arr, marker='o', markersize=10, color='tab:blue', label='test cell')
-                    ax_cell.set_ylabel('Signal cell (A)')
-                    ax_cell.set_ylim(bottom=0, top=1.05*np.min(np.array(signal_B_arr)))
-                    if gui is None:
-                        ax_cell.set_xlim(nm_lim)
-                    lns2 = ax_ref.plot(measured_wavelengths, signal_A_arr, marker='o', markersize=2, linewidth=0.5, color='tab:orange', label='ref cell')
-                    ax_ref.set_ylabel('Signal ref. (A)')
-                    ax_ref.set_ylim(bottom=0, top=1.05*np.min(np.array(signal_A_arr)))
-                    lns = lns1+lns2
-                    labs = [l.get_label() for l in lns]
-                    ax_cell.legend(lns, labs, loc=0)
-                    ax_cell.set_title('Raw signal')
-                elif what == 'IPCE':
-                    lns1 = ax_cell.plot(measured_wavelengths, IPCE_arr, marker='o', markersize=10, color='tab:blue', label='EQE')
-                    if gui is None:
-                        ax_cell.set_ylabel('EQE (%)')
-                        ax_cell.set_xlim(nm_lim)
-                    ax_cell.set_ylim(bottom=0, top=max(0.01, 1.05*np.max(np.array(IPCE_arr))))
-                    lns2 = ax_ref.plot(measured_wavelengths, int_curr_arr, color='tab:orange', linewidth=1.0, label='Integrated current')
-                    if gui is None:
-                        ax_ref.set_ylabel('Integrated current (mA/cm2)')
-                    ax_ref.set_ylim(bottom=0, top=max(0.0001, 1.05*int_curr_arr[-1]))
-                    ax_ref.set_ylabel('Integrated current (mA/cm2)')
-                    lns = lns1+lns2
-                    labs = [l.get_label() for l in lns]
-                    #ax_cell.legend(lns, labs, loc='upper left')
-                    ax_cell.legend(lns, labs)
-                    if gui is None:
-                        ax_cell.set_title('IPCE of test cell')
-        
+                emit_live_update(
+                    f'Wavelength = {nm} nm - IPCE = {IPCE:.1f} %\n'
+                    f'Integrated current = {int_curr:.2f} mA/cm2'
+                )
+
             if show_IPCE and show_raw_signal:
                 plot_data('IPCE', ax_cell=ax_left, ax_ref=ax_left_ref)
                 plot_data('raw_signal', ax_cell=ax_right_cell, ax_ref=ax_right_ref)
@@ -882,6 +992,7 @@ def perform_measurement(mono, smu, df_incbeamcurr, calibration_measurement, nm_l
                 plot_data('IPCE', ax_cell=ax_cell, ax_ref=ax_ref)
             elif show_raw_signal:
                 plot_data('raw_signal', ax_cell=ax_cell, ax_ref=ax_ref)
+
             if canvas is None:
                 display.display(plt.gcf())
                 display.clear_output(wait=True)
@@ -889,21 +1000,35 @@ def perform_measurement(mono, smu, df_incbeamcurr, calibration_measurement, nm_l
                 canvas.draw()
                 canvas.flush_events()
                 plt.pause(0.001)
+
             if stop_when_zero and cell_current is not None and abs(cell_current) < 1e-7:
-                #messagebox.showinfo("Info", f"Measurement interrupted since 'Stop when zero' flag is set.")
                 break
+
         except KeyboardInterrupt:
             break
+
     if gui is None:
-        plt.show()    
+        plt.show()
+
     mono.shutter(False)
     mono.goto_nm(550, gui=gui, root=root)
-    if not calibration_measurement:
-        df = pd.DataFrame({'Wavelength (nm)': np.asarray(measured_wavelengths), 'EQE (%)': np.asarray(IPCE_arr), 'Integrated current (mA/cm2)': np.asarray(int_curr_arr),'Current ref-chA (A)': np.asarray(signal_A_arr), 'Current cell-chB (A)': np.asarray(signal_B_arr)})
-    else:
-        df = pd.DataFrame({'Wavelength (nm)': np.asarray(measured_wavelengths), 'Current ref-chA (A)': np.asarray(signal_A_arr), 'Current cell-chB (A)': np.asarray(signal_B_arr)})
-    df.set_index('Wavelength (nm)', inplace=True)
 
+    if not calibration_measurement:
+        df = pd.DataFrame({
+            'Wavelength (nm)': np.asarray(measured_wavelengths),
+            'EQE (%)': np.asarray(IPCE_arr),
+            'Integrated current (mA/cm2)': np.asarray(int_curr_arr),
+            'Current ref-chA (A)': np.asarray(signal_A_arr),
+            'Current cell-chB (A)': np.asarray(signal_B_arr)
+        })
+    else:
+        df = pd.DataFrame({
+            'Wavelength (nm)': np.asarray(measured_wavelengths),
+            'Current ref-chA (A)': np.asarray(signal_A_arr),
+            'Current cell-chB (A)': np.asarray(signal_B_arr)
+        })
+
+    df.set_index('Wavelength (nm)', inplace=True)
     return df
 
 

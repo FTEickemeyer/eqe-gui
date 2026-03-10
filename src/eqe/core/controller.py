@@ -1,6 +1,5 @@
 from eqe.core import eqe_main_legacy as EQE
 from eqe.config.config_loader import load_config
-from eqe.core.models import MeasurementParams
 
 
 class MeasurementController:
@@ -26,7 +25,24 @@ class MeasurementController:
         )
         return self.mono, self.smu
 
-    def run_measurement(self, params: MeasurementParams, df_incbeamcurr, gui, root):
+    def run_measurement(self, params, df_incbeamcurr, gui, root):
+        def on_live_update(message):
+            gui["live_update_var"].set(message)
+            try:
+                root.update_idletasks()
+            except Exception:
+                pass
+
+        def on_status(message):
+            gui["status_var"].set(message)
+            try:
+                root.update_idletasks()
+            except Exception:
+                pass
+
+        def stop_requested():
+            return gui["stop_flag"].get()
+
         df_IPCE = EQE.perform_measurement(
             self.mono,
             self.smu,
@@ -35,7 +51,10 @@ class MeasurementController:
             (params.wl_start, params.wl_stop),
             delta_nm=params.interval,
             show_raw_signal=params.show_raw,
-            gui=gui,
-            root=root
+            gui=gui,              # keep plotting through legacy gui
+            root=root,            # keep mono.goto_nm status updates working
+            on_live_update=on_live_update,
+            on_status=on_status,
+            stop_requested=stop_requested,
         )
         return df_IPCE

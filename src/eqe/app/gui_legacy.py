@@ -28,8 +28,8 @@ data_dir = config["paths"]["data_dir"]
 def connect_instruments():
     try:
         controller.connect_instruments(
-            mono=None,
-            smu=None,
+            mono=controller.mono,
+            smu=controller.smu,
             N=500,
             nplc=0.01,
             interval=0.002,
@@ -397,10 +397,17 @@ def start_measurement():
 # --- Shutdown ---
 def on_closing():
     try:
-        smu.close()
-        mono.close()
+        if controller.smu is not None:
+            controller.smu.close()
     except Exception as e:
-        print("Error during shutdown:", e)
+        print("Error closing SMU:", e)
+
+    try:
+        if controller.mono is not None:
+            controller.mono.close()
+    except Exception as e:
+        print("Error closing monochromator:", e)
+
     root.destroy()
 
 root.protocol("WM_DELETE_WINDOW", on_closing)
