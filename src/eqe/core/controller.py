@@ -1,7 +1,9 @@
 import threading
 
-from eqe.core import eqe_main_legacy as EQE
 from eqe.config.config_loader import load_config
+from eqe.core import eqe_main_legacy as EQE
+from eqe.core.instruments.factory import initialize_system
+from eqe.core.measurement_engine import perform_measurement
 
 
 class MeasurementController:
@@ -26,12 +28,12 @@ class MeasurementController:
         if interval is None:
             interval = self.config["measurement"]["interval"]
 
-        self.mono, self.smu = EQE.initialize_system(
-            mono,
-            smu,
+        self.mono, self.smu = initialize_system(
+            mono=mono,
+            smu=smu,
             N=N,
             nplc=nplc,
-            interval=interval
+            interval=interval,
         )
         return self.mono, self.smu
 
@@ -54,18 +56,6 @@ class MeasurementController:
         callbacks=None,
         ui_dispatch=None,
     ):
-        """
-        Run the measurement in a worker thread.
-
-        callbacks may contain:
-            - on_live_update(message)
-            - on_status(message)
-            - on_point_acquired(...)
-            - on_done(df_ipce)
-            - on_error(exception)
-            - on_finished()
-        """
-
         if self._measurement_running:
             raise RuntimeError("A measurement is already running.")
 
@@ -78,7 +68,7 @@ class MeasurementController:
 
         def worker():
             try:
-                df_ipce = EQE.perform_measurement(
+                df_ipce = perform_measurement(
                     self.mono,
                     self.smu,
                     df_incbeamcurr,

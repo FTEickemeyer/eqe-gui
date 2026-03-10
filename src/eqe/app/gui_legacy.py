@@ -27,6 +27,12 @@ data_dir = config["paths"]["data_dir"]
 
 gui_plot_state = {}
 
+def tk_dispatch(callback, *args, **kwargs):
+    """
+    Ensures GUI updates always run on the Tk main thread.
+    """
+    root.after(0, lambda: callback(*args, **kwargs))
+
 def connect_instruments():
     try:
         controller.connect_instruments(
@@ -330,9 +336,6 @@ def on_point_acquired(
     canvas.draw_idle()
 
 
-def tk_dispatch(callback, *args, **kwargs):
-    root.after(0, lambda: callback(*args, **kwargs))
-
 # --- Start Measurement Function ---
 def start_measurement():
     global df_IPCE, df_ref, sample, user_dir, calibration_measurement, save_raw
@@ -462,13 +465,6 @@ def start_measurement():
         print(f"Unexpected error: {e}")
         return
 
-    finally:
-        try:
-            start_button.config(state='normal')
-            exit_button.config(state='normal')
-            save_button.config(state='normal')
-        except tk.TclError:
-            pass  # GUI was closed
 
 def on_measurement_done(df_result):
     global df_IPCE
