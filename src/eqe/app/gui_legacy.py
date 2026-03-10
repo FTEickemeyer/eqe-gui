@@ -7,6 +7,7 @@ import numpy as np
 import datetime
 import csv
 import os
+from pathlib import Path
 
 # --- Instrument and libraries ---
 from eqe.core import eqe_main_legacy as EQE
@@ -38,16 +39,17 @@ def append_to_log(user, sample, Jsc, MMF, calibration_measurement, autosave, fil
         ])
 
 
-mono = globals().get('mono', None)
-smu = globals().get('smu', None)
-mono, smu = EQE.initialize_system(mono, smu, N=500, nplc=0.01, interval=0.002)
-mono.goto_nm(550.)
-mono.shutter(False)
+#mono = globals().get('mono', None)
+#smu = globals().get('smu', None)
+#mono, smu = EQE.initialize_system(mono, smu, N=500, nplc=0.01, interval=0.002)
+#mono.goto_nm(550.)
+#mono.shutter(False)
 
 # --- GUI ---
 root = tk.Tk()
 root.title("EQE Measurement")
-root.iconbitmap("EQE_icon.ico")
+icon_path = Path(__file__).parent / "assets" / "EQE_icon.ico"
+root.iconbitmap(icon_path)
 root.lift()
 root.attributes('-topmost', True)
 root.after_idle(root.attributes, '-topmost', False)
