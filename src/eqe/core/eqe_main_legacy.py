@@ -764,25 +764,23 @@ def perform_measurement(
     on_live_update=None,
     on_status=None,
     stop_requested=None,
+    on_point_acquired=None,
 ):
-    # Transitional version:
-    # plotting still uses legacy gui/canvas
-    # live updates / status / stop can use callbacks
+    """
+    GUI-agnostic measurement loop.
+
+    Plotting is no longer handled here.
+    The backend emits progress via callbacks.
+    """
 
     if gui is not None:
-        ax_cell = gui.get('ax_cell')
-        ax_ref = gui.get('ax_ref')
-        canvas = gui.get('canvas')
-        live_update_var = gui.get('live_update_var')
         status_var = gui.get('status_var')
+        live_update_var = gui.get('live_update_var')
         stop_flag = gui.get('stop_flag')
         stop_when_zero = gui.get('stop_when_zero', False)
     else:
-        ax_cell = None
-        ax_ref = None
-        canvas = None
-        live_update_var = None
         status_var = None
+        live_update_var = None
         stop_flag = None
         stop_when_zero = False
 
@@ -791,37 +789,6 @@ def perform_measurement(
         show_raw_signal = True
     else:
         show_IPCE = True
-
-    mono.shutter(True)
-    wavelengths = np.arange(nm_lim[0], nm_lim[1] + delta_nm, delta_nm)
-
-    signal_A_arr = []
-    signal_B_arr = []
-    IPCE_arr = []
-    measured_wavelengths = []
-    int_curr_arr = []
-
-    if gui is None:
-        if show_IPCE and show_raw_signal:
-            fig, axes = plt.subplots(1, 2, figsize=(17, 6))
-            ax_left = axes[0]
-            ax_left_ref = ax_left.twinx()
-            ax_right_cell = axes[1]
-            ax_right_ref = ax_right_cell.twinx()
-        elif show_raw_signal:
-            fig, ax_cell = plt.subplots()
-            ax_ref = ax_cell.twinx()
-        elif show_IPCE:
-            fig, ax_cell = plt.subplots()
-            ax_cell.grid(True)
-            ax_ref = ax_cell.twinx()
-    else:
-        if calibration_measurement:
-            show_raw_signal = True
-            show_IPCE = False
-        else:
-            show_raw_signal = False
-            show_IPCE = True
 
     def emit_live_update(message):
         if on_live_update is not None:
@@ -862,69 +829,21 @@ def perform_measurement(
                 return False
         return False
 
-    def plot_data(what, ax_cell=None, ax_ref=None):
-        ax_cell.set_xlabel('Wavelength (nm)')
+    mono.shutter(True)
+    wavelengths = np.arange(nm_lim[0], nm_lim[1] + delta_nm, delta_nm)
 
-        if what == 'raw_signal':
-            lns1 = ax_cell.plot(
-                measured_wavelengths, signal_B_arr,
-                marker='o', markersize=10, color='tab:blue', label='test cell'
-            )
-            ax_cell.set_ylabel('Signal cell (A)')
-            if len(signal_B_arr) > 0:
-                ax_cell.set_ylim(bottom=0, top=1.05 * np.min(np.array(signal_B_arr)))
-            if gui is None:
-                ax_cell.set_xlim(nm_lim)
-
-            lns2 = ax_ref.plot(
-                measured_wavelengths, signal_A_arr,
-                marker='o', markersize=2, linewidth=0.5, color='tab:orange', label='ref cell'
-            )
-            ax_ref.set_ylabel('Signal ref. (A)')
-            if len(signal_A_arr) > 0:
-                ax_ref.set_ylim(bottom=0, top=1.05 * np.min(np.array(signal_A_arr)))
-
-            lns = lns1 + lns2
-            labs = [l.get_label() for l in lns]
-            ax_cell.legend(lns, labs, loc=0)
-            ax_cell.set_title('Raw signal')
-
-        elif what == 'IPCE':
-            lns1 = ax_cell.plot(
-                measured_wavelengths, IPCE_arr,
-                marker='o', markersize=10, color='tab:blue', label='EQE'
-            )
-            if gui is None:
-                ax_cell.set_ylabel('EQE (%)')
-                ax_cell.set_xlim(nm_lim)
-
-            if len(IPCE_arr) > 0:
-                ax_cell.set_ylim(bottom=0, top=max(0.01, 1.05 * np.max(np.array(IPCE_arr))))
-
-            lns2 = ax_ref.plot(
-                measured_wavelengths, int_curr_arr,
-                color='tab:orange', linewidth=1.0, label='Integrated current'
-            )
-            if gui is None:
-                ax_ref.set_ylabel('Integrated current (mA/cm2)')
-
-            if len(int_curr_arr) > 0:
-                ax_ref.set_ylim(bottom=0, top=max(0.0001, 1.05 * int_curr_arr[-1]))
-
-            ax_ref.set_ylabel('Integrated current (mA/cm2)')
-            lns = lns1 + lns2
-            labs = [l.get_label() for l in lns]
-            ax_cell.legend(lns, labs)
-
-            if gui is None:
-                ax_cell.set_title('IPCE of test cell')
+    signal_A_arr = []
+    signal_B_arr = []
+    IPCE_arr = []
+    measured_wavelengths = []
+    int_curr_arr = []
 
     trapz_fn = getattr(np, "trapz", np.trapezoid)
 
     for nm in wavelengths:
         try:
             if should_stop():
-                emit_live_update('Measurement stopped by user.')
+                emit_live_update("Measurement stopped by user.")
                 break
 
             mono.goto_nm(nm, gui=gui, root=root)
@@ -939,6 +858,7 @@ def perform_measurement(
             intSiref_current = smu.chA - smu.chA_dark
             cell_current = smu.chB - smu.chB_dark
 
+            IPCE = None
             if not calibration_measurement:
                 incbeamcurr_div_intSirefcurrent = df_incbeamcurr[
                     'incident beam current (A)/intSiref current (A)'
@@ -954,6 +874,7 @@ def perform_measurement(
             measured_wavelengths.append(nm)
             current_nm_arr = np.array(measured_wavelengths)
 
+            int_curr = None
             if show_IPCE:
                 if nm > nm_lim[0] and len(current_IPCE_arr) >= 2:
                     try:
@@ -985,30 +906,29 @@ def perform_measurement(
                     f'Integrated current = {int_curr:.2f} mA/cm2'
                 )
 
-            if show_IPCE and show_raw_signal:
-                plot_data('IPCE', ax_cell=ax_left, ax_ref=ax_left_ref)
-                plot_data('raw_signal', ax_cell=ax_right_cell, ax_ref=ax_right_ref)
-            elif show_IPCE:
-                plot_data('IPCE', ax_cell=ax_cell, ax_ref=ax_ref)
-            elif show_raw_signal:
-                plot_data('raw_signal', ax_cell=ax_cell, ax_ref=ax_ref)
-
-            if canvas is None:
-                display.display(plt.gcf())
-                display.clear_output(wait=True)
-            else:
-                canvas.draw()
-                canvas.flush_events()
-                plt.pause(0.001)
+            if on_point_acquired is not None:
+                on_point_acquired(
+                    nm=nm,
+                    measured_wavelengths=list(measured_wavelengths),
+                    signal_A_arr=list(signal_A_arr),
+                    signal_B_arr=list(signal_B_arr),
+                    IPCE_arr=list(IPCE_arr),
+                    int_curr_arr=list(int_curr_arr),
+                    intSiref_current=intSiref_current,
+                    cell_current=cell_current,
+                    IPCE=IPCE,
+                    int_curr=int_curr,
+                    show_IPCE=show_IPCE,
+                    show_raw_signal=show_raw_signal,
+                    nm_lim=nm_lim,
+                )
 
             if stop_when_zero and cell_current is not None and abs(cell_current) < 1e-7:
+                emit_status("Measurement stopped because signal reached zero threshold.")
                 break
 
         except KeyboardInterrupt:
             break
-
-    if gui is None:
-        plt.show()
 
     mono.shutter(False)
     mono.goto_nm(550, gui=gui, root=root)
