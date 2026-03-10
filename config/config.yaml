@@ -1,0 +1,12 @@
+paths:
+  system_dir: "C:/Users/labo/Documents/Python"
+  data_dir: "C:/Users/labo/Documents/Data"
+
+instruments:
+  mono_port: "COM2"
+  smu_address: "GPIB1::24::INSTR"
+
+measurement:
+  N: 500
+  nplc: 0.01
+  interval: 0.002

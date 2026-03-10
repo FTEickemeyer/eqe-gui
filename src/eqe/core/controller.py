@@ -1,5 +1,6 @@
 from eqe.core import eqe_main_legacy as EQE
 from eqe.config.config_loader import load_config
+from eqe.core.models import MeasurementParams
 
 
 class MeasurementController:
@@ -25,24 +26,15 @@ class MeasurementController:
         )
         return self.mono, self.smu
 
-    def run_measurement(
-        self,
-        df_incbeamcurr,
-        calibration_measurement,
-        nm_lim,
-        interval,
-        show_raw,
-        gui,
-        root
-    ):
+    def run_measurement(self, params: MeasurementParams, df_incbeamcurr, gui, root):
         df_IPCE = EQE.perform_measurement(
             self.mono,
             self.smu,
             df_incbeamcurr,
-            calibration_measurement,
-            nm_lim,
-            delta_nm=interval,
-            show_raw_signal=show_raw,
+            params.calibration_measurement,
+            (params.wl_start, params.wl_stop),
+            delta_nm=params.interval,
+            show_raw_signal=params.show_raw,
             gui=gui,
             root=root
         )

@@ -9,18 +9,40 @@ import csv
 import os
 from pathlib import Path
 
+from eqe.config.config_loader import load_config
+from eqe.core.models import MeasurementParams
+
 # --- Instrument and libraries ---
 from eqe.core import eqe_main_legacy as EQE
 from eqe.analysis import mmf_legacy as MMF
 from FTE_analysis_libraries import Spectrum as spc
+from eqe.core.controller import MeasurementController
+
+controller = MeasurementController()
+
+config = load_config()
+
+system_dir = config["paths"]["system_dir"]
+data_dir = config["paths"]["data_dir"]
+
+def connect_instruments():
+    try:
+        controller.connect_instruments(
+            mono=None,
+            smu=None,
+            N=500,
+            nplc=0.01,
+            interval=0.002,
+        )
+        print("Instruments connected.")
+    except Exception as e:
+        print(f"Instrument connection failed: {e}")
 
 #plt.ion()
 matplotlib.rcParams['toolbar'] = 'none'
 
 # --- Instrument Initialization ---
 debug = False
-system_dir = r'C:\Users\labo\Documents\Python'
-data_dir = r'C:\Users\labo\Documents\Data'
 
 # --- Log file path ---
 log_file_path = os.path.join(system_dir, "EQE_measurement_log.csv")
@@ -224,14 +246,32 @@ def start_measurement():
     status_var.set("")
     live_update_var.set("")
 
-    user = entry_user.get().strip()
-    sample = entry_sample.get().strip()
     try:
-        wl_start = int(entry_start.get())
-        wl_stop = int(entry_stop.get())
-        interval = int(entry_interval.get())
+        params = MeasurementParams(
+            user=entry_user.get().strip(),
+            sample=entry_sample.get().strip(),
+            wl_start=int(entry_start.get()),
+            wl_stop=int(entry_stop.get()),
+            interval=int(entry_interval.get()),
+            calibration_measurement=bool(calibration_var.get()),
+            show_raw=bool(show_raw_var.get()),
+            save_raw=bool(save_raw_var.get()),
+            stop_when_zero=bool(stop_when_zero_var.get()),
+            autosave=bool(autosave_var.get()),
+        )
 
-        # Check wavelength stop
+        user = params.user
+        sample = params.sample
+        wl_start = params.wl_start
+        wl_stop = params.wl_stop
+        interval = params.interval
+        show_raw = params.show_raw
+        save_raw = params.save_raw
+        stop_when_zero = params.stop_when_zero
+        calibration_measurement = params.calibration_measurement
+        autosave = params.autosave
+
+        # Check wavelength limits
         if wl_start < 350:
             messagebox.showerror("Input Error", "Wavelength Start must be ≥ 350 nm.")
             return
@@ -248,80 +288,101 @@ def start_measurement():
             messagebox.showerror("Input Error", "Start wavelength must be less than stop wavelength.")
             return
 
-
         toggle_calib_checkbox()  # ensure calibration checkbox is updated
-
-        show_raw = bool(show_raw_var.get())
-        save_raw = bool(save_raw_var.get())
-        stop_when_zero = bool(stop_when_zero_var.get())
-        calibration_measurement = bool(calibration_var.get())
 
         user_dir = EQE.create_user_directory(data_dir, user, debug=debug)
         nm_lim = [wl_start, wl_stop]
         nm_lim = EQE.nm_lim_ok(nm_lim, calibration_measurement, debug=debug)
+
+        mono = controller.mono
+        smu = controller.smu
+
+        if mono is None or smu is None:
+            messagebox.showerror("Connection Error", "Instruments are not connected.")
+            return
+
         mono.filter = mono.filter_wheel_position
 
-        df_incbeamcurr, df_ref = EQE.open_calibration(system_dir, nm_lim, calibration_measurement, debug=debug)
+        df_incbeamcurr, df_ref = EQE.open_calibration(
+            system_dir,
+            nm_lim,
+            calibration_measurement,
+            debug=debug
+        )
 
         # Clear and prepare plot
-        # Clear both the main and twin axes
         for child in fig.get_axes():
-            child.cla()  # Clear individual axes
-        fig.clear()      # Clear the whole figure if needed
-
+            child.cla()
+        fig.clear()
 
         # Recreate the main axis
         ax_cell = fig.add_subplot(111)
         ax_ref = ax_cell.twinx()
         ax_cell.grid(True)
         ax_cell.set_xlabel("Wavelength (nm)")
-        ax_cell.set_ylabel('EQE (%)')
+        ax_cell.set_ylabel("EQE (%)")
         ax_cell.set_xlim(nm_lim)
         ax_cell.set_ylim(bottom=0.0, top=100.0)
-        ax_ref.set_ylabel('Integrated current (mA/cm2)')
+        ax_ref.set_ylabel("Integrated current (mA/cm2)")
         ax_ref.set_ylim(bottom=0.0, top=10.001)
-        ax_cell.set_title('EQE Measurement')
+        ax_cell.set_title("EQE Measurement")
         canvas.draw()
 
         # Perform measurement live
-        gui = {'ax_cell': ax_cell, 'ax_ref': ax_ref, 'canvas': canvas, 'live_update_var': live_update_var, 'status_var': status_var, 'stop_flag': stop_flag, 'stop_when_zero': stop_when_zero}
-        df_IPCE = EQE.perform_measurement(
-            mono, smu, df_incbeamcurr,
-            calibration_measurement, nm_lim, delta_nm=interval,
-            show_raw_signal=show_raw,
-            gui=gui, root=root
-        )
+        gui = {
+            'ax_cell': ax_cell,
+            'ax_ref': ax_ref,
+            'canvas': canvas,
+            'live_update_var': live_update_var,
+            'status_var': status_var,
+            'stop_flag': stop_flag,
+            'stop_when_zero': stop_when_zero
+        }
 
-        #ax.plot(wls, ipce, label=sample)
-        #ax.legend()
-        #canvas.draw()
+        df_IPCE = controller.run_measurement(
+            params=params,
+            df_incbeamcurr=df_incbeamcurr,
+            gui=gui,
+            root=root
+        )
 
         if not calibration_measurement:
             try:
                 spec_MMF, Jsc = MMF.calc_MMF_and_Jsc(df_IPCE)
-            except:
+            except Exception:
                 spec_MMF = np.nan
                 Jsc = 0.0
-            #For some reason the thus calculated Jsc is a bit different from the integrated current shown in the graph
+
+            # overwrite with integrated current from measurement
             Jsc = df_IPCE['Integrated current (mA/cm2)'].iloc[-1]
-            status_var.set(f"Calculated short circuit current and spectral mismatch factor\n(MMF only valid for range 350-850nm):\nJsc = {Jsc:.2f} mA/cm²\nMMF = {spec_MMF:.3f}")
+            status_var.set(
+                "Calculated short circuit current and spectral mismatch factor\n"
+                "(MMF only valid for range 350-850nm):\n"
+                f"Jsc = {Jsc:.2f} mA/cm²\n"
+                f"MMF = {spec_MMF:.3f}"
+            )
         else:
             spec_MMF = np.nan
             Jsc = np.nan
 
-        autosave = bool(autosave_var.get())
         if autosave:
             manual_save()
 
     except ValueError as e:
         if "invalid literal" in str(e) or "int()" in str(e):
-            messagebox.showerror("Input Error", "Please enter valid integer values for wavelength limits (350 - 1170 nm) and interval (> 0 nm).")
+            messagebox.showerror(
+                "Input Error",
+                "Please enter valid integer values for wavelength limits (350 - 1170 nm) and interval (> 0 nm)."
+            )
         else:
             messagebox.showerror("Value Error", f"A value error occurred:\n{e}")
         return
+
     except Exception as e:
-        # Catch unexpected issues like connection loss, COM port errors, etc.
-        messagebox.showerror("Unexpected Error", f"An unexpected error occurred:\n{e}. Try to restart the program!")
+        messagebox.showerror(
+            "Unexpected Error",
+            f"An unexpected error occurred:\n{e}. Try to restart the program!"
+        )
         print(f"Unexpected error: {e}")
         return
 
@@ -330,7 +391,6 @@ def start_measurement():
             start_button.config(state='normal')
             exit_button.config(state='normal')
             save_button.config(state='normal')
-
         except tk.TclError:
             pass  # GUI was closed
 
@@ -344,4 +404,5 @@ def on_closing():
     root.destroy()
 
 root.protocol("WM_DELETE_WINDOW", on_closing)
+connect_instruments()
 root.mainloop()
