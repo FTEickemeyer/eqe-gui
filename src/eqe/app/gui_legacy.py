@@ -12,6 +12,9 @@ from pathlib import Path
 from eqe.config.config_loader import load_config
 from eqe.core.models import MeasurementParams
 from eqe.analysis.calibration import open_calibration
+from eqe.io.paths import create_user_directory
+from eqe.io.data_io import save_data
+from eqe.io.logging import append_to_log
 
 # --- Instrument and libraries ---
 from eqe.core import eqe_main_legacy as EQE
@@ -218,7 +221,7 @@ def manual_save():
     #    return
 
     user = entry_user.get().strip()
-    user_dir = EQE.create_user_directory(data_dir, user, debug=debug)
+    user_dir = create_user_directory(data_dir, user, debug=debug)
     sample = entry_sample.get().strip()
 
     if not calibration_measurement:
@@ -235,7 +238,7 @@ def manual_save():
         Jsc = np.nan
         MMF_float = np.nan
 
-    fp = EQE.save_data(df_IPCE, df_ref, sample, user_dir, system_dir, calibration_measurement, save_raw_data=save_raw, debug=debug, fig=fig)
+    fp = save_data(df_IPCE, df_ref, sample, user_dir, system_dir, calibration_measurement, save_raw_data=save_raw, debug=debug, fig=fig)
     append_to_log(user, entry_sample.get().strip(), Jsc, MMF_float, calibration_measurement, False, fp)
     messagebox.showinfo("Data Saved", "Data has been saved successfully.")
 
@@ -391,7 +394,7 @@ def start_measurement():
 
         toggle_calib_checkbox()  # ensure calibration checkbox is updated
 
-        user_dir = EQE.create_user_directory(data_dir, user, debug=debug)
+        user_dir = create_user_directory(data_dir, user, debug=debug)
         nm_lim = [wl_start, wl_stop]
         nm_lim = EQE.nm_lim_ok(nm_lim, calibration_measurement, debug=debug)
 
