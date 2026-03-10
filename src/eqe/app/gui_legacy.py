@@ -15,6 +15,7 @@ from eqe.analysis.calibration import open_calibration
 from eqe.io.paths import create_user_directory
 from eqe.io.data_io import save_data
 from eqe.io.logging import append_to_log
+from eqe.app.state import AppState
 
 # --- Instrument and libraries ---
 from eqe.core import eqe_main_legacy as EQE
@@ -30,6 +31,7 @@ system_dir = config["paths"]["system_dir"]
 data_dir = config["paths"]["data_dir"]
 
 gui_plot_state = {}
+state = AppState()
 
 def tk_dispatch(callback, *args, **kwargs):
     """
@@ -215,16 +217,15 @@ canvas.draw()
 canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
 def manual_save():
-    global df_IPCE, df_ref, calibration_measurement, save_raw
-    #if len(last_wavelengths) == 0 or len(last_ipce_values) == 0:
-    #    messagebox.showwarning("No Data", "No EQE data available to save.")
-    #    return
+    if state.df_ipce is None:
+        messagebox.showwarning("No Data", "No measurement data available to save.")
+        return
 
     user = entry_user.get().strip()
-    user_dir = create_user_directory(data_dir, user, debug=debug)
+    state.user_dir = create_user_directory(data_dir, user, debug=debug)
     sample = entry_sample.get().strip()
 
-    if not calibration_measurement:
+    if not state.calibration_measurement:
         try:
             JscMMF_text = status_var.get().split('\n')
             Jsc = float(JscMMF_text[2].split('=')[1].split('mA')[0].strip())
@@ -238,8 +239,26 @@ def manual_save():
         Jsc = np.nan
         MMF_float = np.nan
 
-    fp = save_data(df_IPCE, df_ref, sample, user_dir, system_dir, calibration_measurement, save_raw_data=save_raw, debug=debug, fig=fig)
-    append_to_log(user, entry_sample.get().strip(), Jsc, MMF_float, calibration_measurement, False, fp)
+    fp = save_data(
+        state.df_ipce,
+        state.df_ref,
+        sample,
+        state.user_dir,
+        system_dir,
+        state.calibration_measurement,
+        save_raw_data=state.save_raw,
+        debug=debug,
+        fig=fig,
+    )
+    append_to_log(
+        user,
+        entry_sample.get().strip(),
+        Jsc,
+        MMF_float,
+        state.calibration_measurement,
+        False,
+        fp,
+    )
     messagebox.showinfo("Data Saved", "Data has been saved successfully.")
 
 
@@ -342,7 +361,6 @@ def on_point_acquired(
 
 # --- Start Measurement Function ---
 def start_measurement():
-    global df_IPCE, df_ref, sample, user_dir, calibration_measurement, save_raw
 
     set_gui_running_state()
 
@@ -370,10 +388,13 @@ def start_measurement():
         wl_stop = params.wl_stop
         interval = params.interval
         show_raw = params.show_raw
-        save_raw = params.save_raw
         stop_when_zero = params.stop_when_zero
-        calibration_measurement = params.calibration_measurement
         autosave = params.autosave
+
+        state.user = user
+        state.sample = sample
+        state.calibration_measurement = params.calibration_measurement
+        state.save_raw = params.save_raw
 
         # Check wavelength limits
         if wl_start < 350:
@@ -394,9 +415,9 @@ def start_measurement():
 
         toggle_calib_checkbox()  # ensure calibration checkbox is updated
 
-        user_dir = create_user_directory(data_dir, user, debug=debug)
-        nm_lim = [wl_start, wl_stop]
-        nm_lim = EQE.nm_lim_ok(nm_lim, calibration_measurement, debug=debug)
+        state.user_dir = create_user_directory(data_dir, user, debug=debug)
+        nm_lim = (wl_start, wl_stop)
+        nm_lim = EQE.nm_lim_ok(nm_lim, state.calibration_measurement, debug=debug)
 
         mono = controller.mono
         smu = controller.smu
@@ -407,10 +428,10 @@ def start_measurement():
 
         mono.filter = mono.filter_wheel_position
 
-        df_incbeamcurr, df_ref = open_calibration(
+        df_incbeamcurr, state.df_ref = open_calibration(
             system_dir,
             nm_lim,
-            calibration_measurement,
+            state.calibration_measurement,
             debug=debug
         )
 
@@ -469,20 +490,18 @@ def start_measurement():
         print(f"Unexpected error: {e}")
         return
 
-
 def on_measurement_done(df_result):
-    global df_IPCE
+    state.df_ipce = df_result
 
-    df_IPCE = df_result
+    if not state.calibration_measurement:
 
-    if not calibration_measurement:
         try:
-            spec_MMF, Jsc = MMF.calc_MMF_and_Jsc(df_IPCE)
+            spec_MMF, Jsc = MMF.calc_MMF_and_Jsc(state.df_ipce)
         except Exception:
             spec_MMF = np.nan
             Jsc = 0.0
 
-        Jsc = df_IPCE['Integrated current (mA/cm2)'].iloc[-1]
+        Jsc = state.df_ipce['Integrated current (mA/cm2)'].iloc[-1]
         status_var.set(
             "Calculated short circuit current and spectral mismatch factor\n"
             "(MMF only valid for range 350-850nm):\n"
