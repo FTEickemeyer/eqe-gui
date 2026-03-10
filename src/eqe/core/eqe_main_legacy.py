@@ -363,57 +363,45 @@ class Cornerstone130:
         wavelength = f'{nm:.3f}'
         self.command('gowave', wavelength)
 
-    def goto_nm(self, nm, gui=None, root=None, wait=True):
-        #Grating change at 705 nm, this is when both gratings yield the same intensity
+    def goto_nm(self, nm, on_status=None, wait=True):
+        def emit_status(message):
+            if on_status is not None:
+                on_status(message)
+
+        # Grating change at 705 nm, this is when both gratings yield the same intensity
         if (nm >= 0) and (nm <= 1200):
             if nm < 680:
                 if self.filter == 3:
-                    if gui is not None:
-                        gui["status_var"].set(f"Switching filter...")
-                        root.update_idletasks()
+                    emit_status("Switching filter...")
                     self.set_filter(2)
                     time.sleep(9)
-                    if gui is not None:
-                        gui["status_var"].set(f"")
-                        root.update_idletasks()
+                    emit_status("")
             else:
                 if self.filter == 2:
-                    if gui is not None:
-                        gui["status_var"].set(f"Switching filter...")
-                        root.update_idletasks()
+                    emit_status("Switching filter...")
                     self.set_filter(3)
                     time.sleep(4)
-                    if gui is not None:
-                        gui["status_var"].set(f"")
-                        root.update_idletasks()
+                    emit_status("")
 
             if nm < self.grating_change_nm:
                 if self.grating['number'] == 2:
-                    if gui is not None:
-                        gui["status_var"].set(f"Switching grating...")
-                        root.update_idletasks()
+                    emit_status("Switching grating...")
                     self.set_grating(1)
                     self.goto(nm)
                     if wait:
                         time.sleep(21)
-                    if gui is not None:
-                        gui["status_var"].set(f"")
-                        root.update_idletasks()
+                    emit_status("")
                 else:
                     self.goto(nm)
                     time.sleep(0.2)
             else:
                 if self.grating['number'] == 1:
-                    if gui is not None:
-                        gui["status_var"].set(f"Switching grating...")
-                        root.update_idletasks()
+                    emit_status("Switching grating...")
                     self.set_grating(2)
                     self.goto(nm)
                     if wait:
                         time.sleep(26)
-                    if gui is not None:
-                        gui["status_var"].set(f"")
-                        root.update_idletasks()
+                    emit_status("")
                 else:
                     self.goto(nm)
                     time.sleep(0.2)
@@ -759,8 +747,7 @@ def perform_measurement(
     nm_lim,
     delta_nm=10,
     show_raw_signal=False,
-    gui=None,
-    root=None,
+    stop_when_zero=False,
     on_live_update=None,
     on_status=None,
     stop_requested=None,
@@ -773,17 +760,6 @@ def perform_measurement(
     The backend emits progress via callbacks.
     """
 
-    if gui is not None:
-        status_var = gui.get('status_var')
-        live_update_var = gui.get('live_update_var')
-        stop_flag = gui.get('stop_flag')
-        stop_when_zero = gui.get('stop_when_zero', False)
-    else:
-        status_var = None
-        live_update_var = None
-        stop_flag = None
-        stop_when_zero = False
-
     if calibration_measurement:
         show_IPCE = False
         show_raw_signal = True
@@ -793,26 +769,12 @@ def perform_measurement(
     def emit_live_update(message):
         if on_live_update is not None:
             on_live_update(message)
-        elif live_update_var is not None:
-            live_update_var.set(message)
-            if root is not None:
-                try:
-                    root.update_idletasks()
-                except Exception:
-                    pass
         else:
             print(message)
 
     def emit_status(message):
         if on_status is not None:
             on_status(message)
-        elif status_var is not None:
-            status_var.set(message)
-            if root is not None:
-                try:
-                    root.update_idletasks()
-                except Exception:
-                    pass
         elif message:
             print(message)
 
@@ -820,11 +782,6 @@ def perform_measurement(
         if stop_requested is not None:
             try:
                 return bool(stop_requested())
-            except Exception:
-                return False
-        if stop_flag is not None:
-            try:
-                return bool(stop_flag.get())
             except Exception:
                 return False
         return False
@@ -846,7 +803,7 @@ def perform_measurement(
                 emit_live_update("Measurement stopped by user.")
                 break
 
-            mono.goto_nm(nm, gui=gui, root=root)
+            mono.goto_nm(nm, on_status=emit_status)
             mono.shutter(False)
 
             if nm == nm_lim[0] or nm == grating_change_nm:
@@ -931,7 +888,7 @@ def perform_measurement(
             break
 
     mono.shutter(False)
-    mono.goto_nm(550, gui=gui, root=root)
+    mono.goto_nm(550, on_status=emit_status)
 
     if not calibration_measurement:
         df = pd.DataFrame({

@@ -1,3 +1,5 @@
+import threading
+
 from eqe.core import eqe_main_legacy as EQE
 from eqe.config.config_loader import load_config
 
@@ -7,6 +9,14 @@ class MeasurementController:
         self.mono = None
         self.smu = None
         self.config = load_config()
+
+        self._measurement_thread = None
+        self._stop_requested = False
+        self._measurement_running = False
+
+    @property
+    def is_measuring(self):
+        return self._measurement_running
 
     def connect_instruments(self, mono=None, smu=None, N=None, nplc=None, interval=None):
         if N is None:
@@ -25,111 +35,81 @@ class MeasurementController:
         )
         return self.mono, self.smu
 
-    def run_measurement(self, params, df_incbeamcurr, gui, root):
-        ax_cell = gui["ax_cell"]
-        ax_ref = gui["ax_ref"]
-        canvas = gui["canvas"]
+    def request_stop(self):
+        self._stop_requested = True
 
-        def on_live_update(message):
-            gui["live_update_var"].set(message)
+    def _emit(self, callback, ui_dispatch, *args, **kwargs):
+        if callback is None:
+            return
+        if ui_dispatch is None:
+            callback(*args, **kwargs)
+        else:
+            ui_dispatch(callback, *args, **kwargs)
+
+    def run_measurement_async(
+        self,
+        params,
+        df_incbeamcurr,
+        nm_lim,
+        callbacks=None,
+        ui_dispatch=None,
+    ):
+        """
+        Run the measurement in a worker thread.
+
+        callbacks may contain:
+            - on_live_update(message)
+            - on_status(message)
+            - on_point_acquired(...)
+            - on_done(df_ipce)
+            - on_error(exception)
+            - on_finished()
+        """
+
+        if self._measurement_running:
+            raise RuntimeError("A measurement is already running.")
+
+        if self.mono is None or self.smu is None:
+            raise RuntimeError("Instruments are not connected.")
+
+        callbacks = callbacks or {}
+        self._stop_requested = False
+        self._measurement_running = True
+
+        def worker():
             try:
-                root.update_idletasks()
-            except Exception:
-                pass
+                df_ipce = EQE.perform_measurement(
+                    self.mono,
+                    self.smu,
+                    df_incbeamcurr,
+                    params.calibration_measurement,
+                    nm_lim,
+                    delta_nm=params.interval,
+                    show_raw_signal=params.show_raw,
+                    stop_when_zero=params.stop_when_zero,
+                    on_live_update=lambda message: self._emit(
+                        callbacks.get("on_live_update"), ui_dispatch, message
+                    ),
+                    on_status=lambda message: self._emit(
+                        callbacks.get("on_status"), ui_dispatch, message
+                    ),
+                    stop_requested=lambda: self._stop_requested,
+                    on_point_acquired=lambda **payload: self._emit(
+                        callbacks.get("on_point_acquired"), ui_dispatch, **payload
+                    ),
+                )
 
-        def on_status(message):
-            gui["status_var"].set(message)
-            try:
-                root.update_idletasks()
-            except Exception:
-                pass
+                self._emit(callbacks.get("on_done"), ui_dispatch, df_ipce)
 
-        def stop_requested():
-            return gui["stop_flag"].get()
+            except Exception as exc:
+                self._emit(callbacks.get("on_error"), ui_dispatch, exc)
 
-        def on_point_acquired(
-            nm,
-            measured_wavelengths,
-            signal_A_arr,
-            signal_B_arr,
-            IPCE_arr,
-            int_curr_arr,
-            intSiref_current,
-            cell_current,
-            IPCE,
-            int_curr,
-            show_IPCE,
-            show_raw_signal,
-            nm_lim,
-        ):
-            ax_cell.cla()
-            ax_ref.cla()
+            finally:
+                self._measurement_running = False
+                self._emit(callbacks.get("on_finished"), ui_dispatch)
 
-            ax_cell.grid(True)
-            ax_cell.set_xlabel("Wavelength (nm)")
-
-            if show_IPCE:
-                ax_cell.set_ylabel("EQE (%)")
-                ax_cell.set_xlim(nm_lim)
-                if len(IPCE_arr) > 0:
-                    ax_cell.plot(measured_wavelengths, IPCE_arr, marker="o", label="EQE")
-                    ax_cell.set_ylim(bottom=0, top=max(0.01, 1.05 * max(IPCE_arr)))
-
-                ax_ref.set_ylabel("Integrated current (mA/cm2)")
-                if len(int_curr_arr) > 0:
-                    ax_ref.plot(measured_wavelengths, int_curr_arr, label="Integrated current")
-                    ax_ref.set_ylim(bottom=0, top=max(0.0001, 1.05 * int_curr_arr[-1]))
-
-                lines1, labels1 = ax_cell.get_legend_handles_labels()
-                lines2, labels2 = ax_ref.get_legend_handles_labels()
-                if lines1 or lines2:
-                    ax_cell.legend(lines1 + lines2, labels1 + labels2)
-
-                ax_cell.set_title("EQE Measurement")
-
-            elif show_raw_signal:
-                ax_cell.set_ylabel("Signal cell (A)")
-                ax_ref.set_ylabel("Signal ref. (A)")
-                ax_cell.set_xlim(nm_lim)
-
-                if len(signal_B_arr) > 0:
-                    ax_cell.plot(measured_wavelengths, signal_B_arr, marker="o", label="test cell")
-                    y_max = 1.05 * max(signal_B_arr)
-                    y_min = min(0, 1.05 * min(signal_B_arr))
-                    ax_cell.set_ylim(bottom=y_min, top=y_max if y_max != y_min else y_max + 1e-12)
-
-                if len(signal_A_arr) > 0:
-                    ax_ref.plot(measured_wavelengths, signal_A_arr, marker="o", label="ref cell")
-                    y_max = 1.05 * max(signal_A_arr)
-                    y_min = min(0, 1.05 * min(signal_A_arr))
-                    ax_ref.set_ylim(bottom=y_min, top=y_max if y_max != y_min else y_max + 1e-12)
-
-                lines1, labels1 = ax_cell.get_legend_handles_labels()
-                lines2, labels2 = ax_ref.get_legend_handles_labels()
-                if lines1 or lines2:
-                    ax_cell.legend(lines1 + lines2, labels1 + labels2)
-
-                ax_cell.set_title("Raw signal")
-
-            canvas.draw()
-            try:
-                canvas.flush_events()
-            except Exception:
-                pass
-
-        df_IPCE = EQE.perform_measurement(
-            self.mono,
-            self.smu,
-            df_incbeamcurr,
-            params.calibration_measurement,
-            (params.wl_start, params.wl_stop),
-            delta_nm=params.interval,
-            show_raw_signal=params.show_raw,
-            gui=gui,          # still passed because mono.goto_nm uses gui/root for status during filter/grating switching
-            root=root,
-            on_live_update=on_live_update,
-            on_status=on_status,
-            stop_requested=stop_requested,
-            on_point_acquired=on_point_acquired,
+        self._measurement_thread = threading.Thread(
+            target=worker,
+            daemon=True,
         )
-        return df_IPCE
+        self._measurement_thread.start()

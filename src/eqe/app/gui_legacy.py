@@ -25,6 +25,8 @@ config = load_config()
 system_dir = config["paths"]["system_dir"]
 data_dir = config["paths"]["data_dir"]
 
+gui_plot_state = {}
+
 def connect_instruments():
     try:
         controller.connect_instruments(
@@ -163,8 +165,7 @@ save_button = tk.Button(button_frame, text="Save", width=button_width, command=l
 save_button.grid(row=0, column=1, padx=5)
 save_button.config(state='disabled')
 
-
-stop_button = tk.Button(button_frame, text="Stop", width=button_width, command=lambda: stop_flag.set(True))
+stop_button = tk.Button(button_frame, text="Stop", width=button_width, command=controller.request_stop)
 stop_button.grid(row=0, column=2, padx=5)
 stop_button.config(state='disabled')
 
@@ -232,15 +233,111 @@ def manual_save():
     messagebox.showinfo("Data Saved", "Data has been saved successfully.")
 
 
+def set_gui_running_state():
+    stop_button.config(state='normal')
+    start_button.config(state='disabled')
+    exit_button.config(state='disabled')
+    save_button.config(state='disabled')
+    status_var.set("")
+    live_update_var.set("")
+
+
+def set_gui_idle_state():
+    try:
+        start_button.config(state='normal')
+        exit_button.config(state='normal')
+        save_button.config(state='normal')
+        stop_button.config(state='disabled')
+    except tk.TclError:
+        pass
+
+
+def on_live_update(message):
+    live_update_var.set(message)
+
+
+def on_status(message):
+    status_var.set(message)
+
+
+def on_point_acquired(
+    nm,
+    measured_wavelengths,
+    signal_A_arr,
+    signal_B_arr,
+    IPCE_arr,
+    int_curr_arr,
+    intSiref_current,
+    cell_current,
+    IPCE,
+    int_curr,
+    show_IPCE,
+    show_raw_signal,
+    nm_lim,
+):
+    ax_cell = gui_plot_state["ax_cell"]
+    ax_ref = gui_plot_state["ax_ref"]
+
+    ax_cell.cla()
+    ax_ref.cla()
+
+    ax_cell.grid(True)
+    ax_cell.set_xlabel("Wavelength (nm)")
+
+    if show_IPCE:
+        ax_cell.set_ylabel("EQE (%)")
+        ax_cell.set_xlim(nm_lim)
+        if len(IPCE_arr) > 0:
+            ax_cell.plot(measured_wavelengths, IPCE_arr, marker="o", label="EQE")
+            ax_cell.set_ylim(bottom=0, top=max(0.01, 1.05 * max(IPCE_arr)))
+
+        ax_ref.set_ylabel("Integrated current (mA/cm2)")
+        if len(int_curr_arr) > 0:
+            ax_ref.plot(measured_wavelengths, int_curr_arr, label="Integrated current")
+            ax_ref.set_ylim(bottom=0, top=max(0.0001, 1.05 * int_curr_arr[-1]))
+
+        lines1, labels1 = ax_cell.get_legend_handles_labels()
+        lines2, labels2 = ax_ref.get_legend_handles_labels()
+        if lines1 or lines2:
+            ax_cell.legend(lines1 + lines2, labels1 + labels2)
+
+        ax_cell.set_title("EQE Measurement")
+
+    elif show_raw_signal:
+        ax_cell.set_ylabel("Signal cell (A)")
+        ax_ref.set_ylabel("Signal ref. (A)")
+        ax_cell.set_xlim(nm_lim)
+
+        if len(signal_B_arr) > 0:
+            ax_cell.plot(measured_wavelengths, signal_B_arr, marker="o", label="test cell")
+            y_max = 1.05 * max(signal_B_arr)
+            y_min = min(0, 1.05 * min(signal_B_arr))
+            ax_cell.set_ylim(bottom=y_min, top=y_max if y_max != y_min else y_max + 1e-12)
+
+        if len(signal_A_arr) > 0:
+            ax_ref.plot(measured_wavelengths, signal_A_arr, marker="o", label="ref cell")
+            y_max = 1.05 * max(signal_A_arr)
+            y_min = min(0, 1.05 * min(signal_A_arr))
+            ax_ref.set_ylim(bottom=y_min, top=y_max if y_max != y_min else y_max + 1e-12)
+
+        lines1, labels1 = ax_cell.get_legend_handles_labels()
+        lines2, labels2 = ax_ref.get_legend_handles_labels()
+        if lines1 or lines2:
+            ax_cell.legend(lines1 + lines2, labels1 + labels2)
+
+        ax_cell.set_title("Raw signal")
+
+    canvas.draw_idle()
+
+
+def tk_dispatch(callback, *args, **kwargs):
+    root.after(0, lambda: callback(*args, **kwargs))
+
 # --- Start Measurement Function ---
 def start_measurement():
     global df_IPCE, df_ref, sample, user_dir, calibration_measurement, save_raw
 
-    stop_button.config(state='normal')
-    stop_flag.set(False)
-    start_button.config(state='disabled')
-    exit_button.config(state='disabled')
-    save_button.config(state='disabled')
+    set_gui_running_state()
 
     # Clear old data
     status_var.set("")
@@ -328,45 +425,24 @@ def start_measurement():
         ax_cell.set_title("EQE Measurement")
         canvas.draw()
 
-        # Perform measurement live
-        gui = {
-            'ax_cell': ax_cell,
-            'ax_ref': ax_ref,
-            'canvas': canvas,
-            'live_update_var': live_update_var,
-            'status_var': status_var,
-            'stop_flag': stop_flag,
-            'stop_when_zero': stop_when_zero
-        }
+        gui_plot_state["ax_cell"] = ax_cell
+        gui_plot_state["ax_ref"] = ax_ref
 
-        df_IPCE = controller.run_measurement(
+        # Perform measurement live
+        controller.run_measurement_async(
             params=params,
             df_incbeamcurr=df_incbeamcurr,
-            gui=gui,
-            root=root
+            nm_lim=nm_lim,
+            ui_dispatch=tk_dispatch,
+            callbacks={
+                "on_live_update": on_live_update,
+                "on_status": on_status,
+                "on_point_acquired": on_point_acquired,
+                "on_done": on_measurement_done,
+                "on_error": on_measurement_error,
+                "on_finished": on_measurement_finished,
+            },
         )
-
-        if not calibration_measurement:
-            try:
-                spec_MMF, Jsc = MMF.calc_MMF_and_Jsc(df_IPCE)
-            except Exception:
-                spec_MMF = np.nan
-                Jsc = 0.0
-
-            # overwrite with integrated current from measurement
-            Jsc = df_IPCE['Integrated current (mA/cm2)'].iloc[-1]
-            status_var.set(
-                "Calculated short circuit current and spectral mismatch factor\n"
-                "(MMF only valid for range 350-850nm):\n"
-                f"Jsc = {Jsc:.2f} mA/cm²\n"
-                f"MMF = {spec_MMF:.3f}"
-            )
-        else:
-            spec_MMF = np.nan
-            Jsc = np.nan
-
-        if autosave:
-            manual_save()
 
     except ValueError as e:
         if "invalid literal" in str(e) or "int()" in str(e):
@@ -393,6 +469,44 @@ def start_measurement():
             save_button.config(state='normal')
         except tk.TclError:
             pass  # GUI was closed
+
+def on_measurement_done(df_result):
+    global df_IPCE
+
+    df_IPCE = df_result
+
+    if not calibration_measurement:
+        try:
+            spec_MMF, Jsc = MMF.calc_MMF_and_Jsc(df_IPCE)
+        except Exception:
+            spec_MMF = np.nan
+            Jsc = 0.0
+
+        Jsc = df_IPCE['Integrated current (mA/cm2)'].iloc[-1]
+        status_var.set(
+            "Calculated short circuit current and spectral mismatch factor\n"
+            "(MMF only valid for range 350-850nm):\n"
+            f"Jsc = {Jsc:.2f} mA/cm²\n"
+            f"MMF = {spec_MMF:.3f}"
+        )
+    else:
+        spec_MMF = np.nan
+        Jsc = np.nan
+
+    if autosave_var.get():
+        manual_save()
+
+
+def on_measurement_error(exc):
+    messagebox.showerror(
+        "Unexpected Error",
+        f"An unexpected error occurred:\n{exc}\nTry to restart the program!"
+    )
+    print(f"Unexpected error: {exc}")
+
+
+def on_measurement_finished():
+    set_gui_idle_state()
 
 # --- Shutdown ---
 def on_closing():
