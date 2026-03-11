@@ -144,6 +144,10 @@ def perform_measurement(
                     int_curr = 0.0
                 int_curr_arr.append(int_curr)
 
+            if should_stop():
+                emit_status("Measurement stopped.")
+                break
+
             if show_raw_signal:
                 emit_live_update(
                     f"nm = {nm} nm - signal ref. cell (chA) = {intSiref_current:.2e} A "
@@ -184,7 +188,12 @@ def perform_measurement(
             break
 
     mono.shutter(False)
-    mono.goto_nm(550, on_status=emit_status)
+
+    try:
+        emit_status("Returning monochromator to 550 nm...")
+        mono.goto_nm(550, on_status=emit_status)
+    except Exception:
+        pass
 
     if not calibration_measurement:
         df = pd.DataFrame({
