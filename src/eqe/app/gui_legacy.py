@@ -153,11 +153,6 @@ def toggle_calib_checkbox():
 
 entry_user.bind("<FocusOut>", lambda e: toggle_calib_checkbox())
 
-# --- Buttons ---
-
-# --- Stop flag (define before button use) ---
-stop_flag = tk.BooleanVar(value=False)
-
 # --- Button Frame for Even Spacing ---
 button_frame = tk.Frame(frame_inputs)
 button_frame.grid(row=11, column=0, columnspan=4, pady=10)
@@ -177,7 +172,7 @@ save_button = tk.Button(button_frame, text="Save", width=button_width, command=l
 save_button.grid(row=0, column=1, padx=5)
 save_button.config(state='disabled')
 
-stop_button = tk.Button(button_frame, text="Stop", width=button_width, command=controller.request_stop)
+stop_button = tk.Button(button_frame, text="Stop", width=button_width, command=lambda: stop_measurement())
 stop_button.grid(row=0, column=2, padx=5)
 stop_button.config(state='disabled')
 
@@ -280,6 +275,14 @@ def set_gui_idle_state():
     except tk.TclError:
         pass
 
+def stop_measurement():
+    try:
+        stop_button.config(state='disabled')
+    except tk.TclError:
+        return
+
+    live_update_var.set("Stopping measurement...")
+    controller.request_stop()
 
 def on_live_update(message):
     live_update_var.set(message)

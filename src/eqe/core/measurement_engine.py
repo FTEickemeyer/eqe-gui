@@ -7,6 +7,18 @@ from FTE_analysis_libraries import Spectrum as spc
 
 GRATING_CHANGE_NM = 850
 
+def interruptible_sleep(duration_s, stop_requested, chunk_s=0.05):
+    end_time = time.time() + duration_s
+    while time.time() < end_time:
+        if stop_requested is not None:
+            try:
+                if stop_requested():
+                    return False
+            except Exception:
+                pass
+        remaining = end_time - time.time()
+        time.sleep(min(chunk_s, remaining))
+    return True
 
 def perform_measurement(
     mono,
@@ -76,7 +88,9 @@ def perform_measurement(
             mono.shutter(False)
 
             if nm == nm_lim[0] or nm == GRATING_CHANGE_NM:
-                time.sleep(2)
+                if not interruptible_sleep(2.0, stop_requested):
+                    emit_status("Measurement stopped.")
+                    break
 
             smu.run_dual_measurement()
 

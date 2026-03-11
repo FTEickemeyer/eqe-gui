@@ -12,7 +12,7 @@ class MeasurementController:
         self.config = load_config()
 
         self._measurement_thread = None
-        self._stop_requested = False
+        self._stop_event = threading.Event()
         self._measurement_running = False
 
     @property
@@ -37,7 +37,10 @@ class MeasurementController:
         return self.mono, self.smu
 
     def request_stop(self):
-        self._stop_requested = True
+        self._stop_event.set()
+
+    def stop_requested(self):
+        return self._stop_event.is_set()
 
     def _emit(self, callback, ui_dispatch, *args, **kwargs):
         if callback is None:
@@ -62,7 +65,7 @@ class MeasurementController:
             raise RuntimeError("Instruments are not connected.")
 
         callbacks = callbacks or {}
-        self._stop_requested = False
+        self._stop_event.clear()
         self._measurement_running = True
 
         def worker():
@@ -82,7 +85,7 @@ class MeasurementController:
                     on_status=lambda message: self._emit(
                         callbacks.get("on_status"), ui_dispatch, message
                     ),
-                    stop_requested=lambda: self._stop_requested,
+                    stop_requested=self.stop_requested,
                     on_point_acquired=lambda **payload: self._emit(
                         callbacks.get("on_point_acquired"), ui_dispatch, **payload
                     ),
