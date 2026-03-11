@@ -64,17 +64,17 @@ def connect_instruments():
             nplc=0.01,
             interval=0.002,
             simulate=bool(simulate_var.get()),
+            simulate_profile=simulate_profile_var.get(),
         )
 
         if simulate_var.get():
-            live_update_var.set("Simulation mode: virtual instruments connected.")
+            live_update_var.set(
+                f"Simulation mode: virtual instruments connected ({simulate_profile_var.get()})."
+            )
         else:
             live_update_var.set("Hardware instruments connected.")
 
-        print("Instruments connected.")
-
     except Exception as e:
-        print(f"Instrument connection failed: {e}")
         live_update_var.set(f"Instrument connection failed: {e}")
 
 #plt.ion()
@@ -157,31 +157,12 @@ entry_interval.grid(row=4, column=1)
 
 # --- Checkboxes ---
 simulate_var = tk.IntVar(value=0)
+simulate_profile_var = tk.StringVar(value="good_cell")
 show_raw_var = tk.IntVar(value=0)
 save_raw_var = tk.IntVar(value=1)
 calibration_var = tk.IntVar(value=0)
 stop_when_zero_var = tk.IntVar(value=1)
 autosave_var = tk.IntVar(value=1)
-
-ttk.Checkbutton(
-    frame_inputs,
-    text="Simulation mode",
-    variable=simulate_var
-).grid(row=6, column=0, columnspan=2, sticky='w')
-
-ttk.Checkbutton(
-    frame_inputs,
-    text="Show Raw Signal",
-    variable=show_raw_var,
-    state='disabled'
-).grid(row=7, column=0, columnspan=2, sticky='w')
-
-ttk.Checkbutton(
-    frame_inputs,
-    text="Save Raw Data",
-    variable=save_raw_var,
-    state='disabled'
-).grid(row=8, column=0, columnspan=2, sticky='w')
 
 calib_check = ttk.Checkbutton(
     frame_inputs,
@@ -189,17 +170,60 @@ calib_check = ttk.Checkbutton(
     variable=calibration_var
 )
 
+def update_simulation_controls():
+    if simulate_var.get():
+        simulate_profile_box.config(state="readonly")
+    else:
+        simulate_profile_box.config(state="disabled")
+
+ttk.Checkbutton(
+    frame_inputs,
+    text="Simulation mode",
+    variable=simulate_var,
+    command=update_simulation_controls,
+).grid(row=6, column=0, columnspan=2, sticky='w')
+
+ttk.Label(
+    frame_inputs,
+    text="Sim profile"
+).grid(row=7, column=0, sticky='w')
+
+simulate_profile_box = ttk.Combobox(
+    frame_inputs,
+    textvariable=simulate_profile_var,
+    values=["good_cell", "weak_cell", "dark_cell"],
+    state="readonly",
+    width=18,
+)
+simulate_profile_box.grid(row=7, column=1, sticky='ew')
+
+update_simulation_controls()
+
+ttk.Checkbutton(
+    frame_inputs,
+    text="Show Raw Signal",
+    variable=show_raw_var,
+    state='disabled'
+).grid(row=8, column=0, columnspan=2, sticky='w')
+
+ttk.Checkbutton(
+    frame_inputs,
+    text="Save Raw Data",
+    variable=save_raw_var,
+    state='disabled'
+).grid(row=9, column=0, columnspan=2, sticky='w')
+
 ttk.Checkbutton(
     frame_inputs,
     text="Stop when zero",
     variable=stop_when_zero_var
-).grid(row=9, column=0, columnspan=2, sticky='w')
+).grid(row=10, column=0, columnspan=2, sticky='w')
 
 ttk.Checkbutton(
     frame_inputs,
     text="Autosave",
     variable=autosave_var
-).grid(row=10, column=0, columnspan=2, sticky='w')
+).grid(row=11, column=0, columnspan=2, sticky='w')
 
 # Will be packed later only if user is "Felix"
 def toggle_calib_checkbox():
@@ -213,7 +237,7 @@ entry_user.bind("<FocusOut>", lambda e: toggle_calib_checkbox())
 
 # --- Button Frame for Even Spacing ---
 button_frame = tk.Frame(frame_inputs)
-button_frame.grid(row=11, column=0, columnspan=4, pady=10)
+button_frame.grid(row=12, column=0, columnspan=4, pady=10)
 
 # Make all 4 columns the same width
 for i in range(4):
@@ -241,7 +265,7 @@ exit_button.grid(row=0, column=3, padx=5)
 # --- Live data update ---
 live_update_var = tk.StringVar()
 live_update_label = tk.Label(frame_inputs, textvariable=live_update_var, fg="black", justify="left", wraplength=350)
-live_update_label.grid(row=12, column=0, columnspan=2, pady=(5, 0))
+live_update_label.grid(row=13, column=0, columnspan=2, pady=(5, 0))
 
 # --- Progress Bar ---
 #progress = ttk.Progressbar(frame_inputs, orient="horizontal", length=200, mode="determinate")
@@ -250,7 +274,7 @@ live_update_label.grid(row=12, column=0, columnspan=2, pady=(5, 0))
 # --- Jsc and MMF ---
 status_var = tk.StringVar()
 status_label = tk.Label(frame_inputs, textvariable=status_var, fg="blue", justify="left", wraplength=350)
-status_label.grid(row=13, column=0, columnspan=2, pady=(10, 0))
+status_label.grid(row=14, column=0, columnspan=2, pady=(10, 0))
 
 
 # --- Matplotlib Plot Init ---
@@ -623,7 +647,6 @@ def start_measurement():
             "Unexpected Error",
             f"An unexpected error occurred:\n{e}. Try to restart the program!"
         )
-        print(f"Unexpected error: {e}")
         return
 
 def on_measurement_done(df_result):
@@ -657,8 +680,6 @@ def on_measurement_error(exc):
         "Unexpected Error",
         f"An unexpected error occurred:\n{exc}\nTry to restart the program!"
     )
-    print(f"Unexpected error: {exc}")
-
 
 def on_measurement_finished():
     set_gui_idle_state()

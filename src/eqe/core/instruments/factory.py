@@ -5,10 +5,18 @@ from eqe.core.instruments.simulated import SimulatedMonochromator, SimulatedSMU
 GRATING_CHANGE_NM = 850
 
 
-def initialize_system(mono=None, smu=None, N=500, nplc=0.01, interval=0.001, simulate=False):
+def initialize_system(
+    mono=None,
+    smu=None,
+    N=None,
+    nplc=None,
+    interval=None,
+    simulate=False,
+    simulate_profile="good_cell",
+):
 
     if simulate:
-        sim_smu = SimulatedSMU()
+        sim_smu = SimulatedSMU(profile=simulate_profile)
         sim_mono = SimulatedMonochromator(smu=sim_smu)
         return sim_mono, sim_smu
 
