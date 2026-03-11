@@ -79,13 +79,18 @@ def perform_measurement(
     trapz_fn = getattr(np, "trapz", np.trapezoid)
 
     for nm in wavelengths:
+        if should_stop():
+            emit_status("Measurement stopped.")
+            break
+
         try:
-            if should_stop():
-                emit_live_update("Measurement stopped by user.")
-                break
 
             mono.goto_nm(nm, on_status=emit_status)
             mono.shutter(False)
+
+            if should_stop():
+                emit_status("Measurement stopped.")
+                break
 
             if nm == nm_lim[0] or nm == GRATING_CHANGE_NM:
                 if not interruptible_sleep(2.0, stop_requested):
@@ -151,6 +156,9 @@ def perform_measurement(
                     f"Integrated current = {int_curr:.2f} mA/cm2"
                 )
 
+            if should_stop():
+                emit_status("Measurement stopped.")
+                break
             if on_point_acquired is not None:
                 on_point_acquired(
                     nm=nm,
