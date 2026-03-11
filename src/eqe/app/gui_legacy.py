@@ -41,17 +41,41 @@ def tk_dispatch(callback, *args, **kwargs):
 
 def connect_instruments():
     try:
+        # Close previous instruments first, if any
+        try:
+            if controller.smu is not None:
+                controller.smu.close()
+        except Exception as e:
+            print(f"Error closing previous SMU: {e}")
+
+        try:
+            if controller.mono is not None:
+                controller.mono.close()
+        except Exception as e:
+            print(f"Error closing previous monochromator: {e}")
+
+        controller.mono = None
+        controller.smu = None
+
         controller.connect_instruments(
-            mono=controller.mono,
-            smu=controller.smu,
+            mono=None,
+            smu=None,
             N=500,
             nplc=0.01,
             interval=0.002,
             simulate=bool(simulate_var.get()),
         )
+
+        if simulate_var.get():
+            live_update_var.set("Simulation mode: virtual instruments connected.")
+        else:
+            live_update_var.set("Hardware instruments connected.")
+
         print("Instruments connected.")
+
     except Exception as e:
         print(f"Instrument connection failed: {e}")
+        live_update_var.set(f"Instrument connection failed: {e}")
 
 #plt.ion()
 matplotlib.rcParams['toolbar'] = 'none'
@@ -519,6 +543,8 @@ def start_measurement():
         nm_lim = (wl_start, wl_stop)
         nm_lim = nm_lim_ok(nm_lim, state.calibration_measurement, debug=debug)
 
+        connect_instruments()
+
         mono = controller.mono
         smu = controller.smu
 
@@ -531,7 +557,8 @@ def start_measurement():
             messagebox.showerror("Connection Error", "Instruments are not connected.")
             return
 
-        mono.filter = mono.filter_wheel_position
+        if hasattr(mono, "filter_wheel_position"):
+            mono.filter = mono.filter_wheel_position
 
         df_incbeamcurr, state.df_ref = open_calibration(
             system_dir,
@@ -653,5 +680,4 @@ def on_closing():
     root.destroy()
 
 root.protocol("WM_DELETE_WINDOW", on_closing)
-connect_instruments()
 root.mainloop()

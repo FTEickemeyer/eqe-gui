@@ -20,6 +20,8 @@ class SimulatedMonochromator:
     def shutter(self, open_: bool):
         self.shutter_open = open_
 
+    def close(self):
+        self.shutter_open = False
 
 class SimulatedSMU:
     def __init__(self, noise_level=2e-9, dark_a=2e-10, dark_b=2e-10):
@@ -60,3 +62,6 @@ class SimulatedSMU:
         self.chB = test_signal + self.chB_dark
 
         return self.chA, self.chB
+
+    def close(self):
+        pass
