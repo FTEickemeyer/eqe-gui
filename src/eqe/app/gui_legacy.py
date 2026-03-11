@@ -16,6 +16,7 @@ from eqe.io.paths import create_user_directory
 from eqe.io.data_io import save_data
 from eqe.io.logging import append_to_log
 from eqe.app.state import AppState
+from eqe.utils.validation import nm_lim_ok
 
 # --- Instrument and libraries ---
 from eqe.core import eqe_main_legacy as EQE
@@ -417,7 +418,7 @@ def start_measurement():
 
         state.user_dir = create_user_directory(data_dir, user, debug=debug)
         nm_lim = (wl_start, wl_stop)
-        nm_lim = EQE.nm_lim_ok(nm_lim, state.calibration_measurement, debug=debug)
+        nm_lim = nm_lim_ok(nm_lim, state.calibration_measurement, debug=debug)
 
         mono = controller.mono
         smu = controller.smu
