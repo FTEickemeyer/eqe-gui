@@ -47,6 +47,7 @@ def connect_instruments():
             N=500,
             nplc=0.01,
             interval=0.002,
+            simulate=bool(simulate_var.get()),
         )
         print("Instruments connected.")
     except Exception as e:
@@ -131,22 +132,55 @@ entry_interval.insert(0, "10")
 entry_interval.grid(row=4, column=1)
 
 # --- Checkboxes ---
+simulate_var = tk.IntVar(value=0)
 show_raw_var = tk.IntVar(value=0)
 save_raw_var = tk.IntVar(value=1)
 calibration_var = tk.IntVar(value=0)
 stop_when_zero_var = tk.IntVar(value=1)
 autosave_var = tk.IntVar(value=1)
 
-ttk.Checkbutton(frame_inputs, text="Show Raw Signal", variable=show_raw_var, state='disabled').grid(row=5, column=0, columnspan=2, sticky='w')
-ttk.Checkbutton(frame_inputs, text="Save Raw Data", variable=save_raw_var, state='disabled').grid(row=6, column=0, columnspan=2, sticky='w')
-calib_check = ttk.Checkbutton(frame_inputs, text="Calibration Measurement", variable=calibration_var)
-ttk.Checkbutton(frame_inputs, text="Stop when zero", variable=stop_when_zero_var).grid(row=8, column=0, columnspan=2, sticky='w')
-ttk.Checkbutton(frame_inputs, text="Autosave", variable=autosave_var).grid(row=9, column=0, columnspan=2, sticky='w')
+ttk.Checkbutton(
+    frame_inputs,
+    text="Simulation mode",
+    variable=simulate_var
+).grid(row=6, column=0, columnspan=2, sticky='w')
+
+ttk.Checkbutton(
+    frame_inputs,
+    text="Show Raw Signal",
+    variable=show_raw_var,
+    state='disabled'
+).grid(row=7, column=0, columnspan=2, sticky='w')
+
+ttk.Checkbutton(
+    frame_inputs,
+    text="Save Raw Data",
+    variable=save_raw_var,
+    state='disabled'
+).grid(row=8, column=0, columnspan=2, sticky='w')
+
+calib_check = ttk.Checkbutton(
+    frame_inputs,
+    text="Calibration Measurement",
+    variable=calibration_var
+)
+
+ttk.Checkbutton(
+    frame_inputs,
+    text="Stop when zero",
+    variable=stop_when_zero_var
+).grid(row=9, column=0, columnspan=2, sticky='w')
+
+ttk.Checkbutton(
+    frame_inputs,
+    text="Autosave",
+    variable=autosave_var
+).grid(row=10, column=0, columnspan=2, sticky='w')
 
 # Will be packed later only if user is "Felix"
 def toggle_calib_checkbox():
     if entry_user.get().strip().lower() == "felix":
-        calib_check.grid(row=7, column=0, columnspan=2, sticky='w')
+        calib_check.grid(row=5, column=0, columnspan=2, sticky='w')
     else:
         calibration_var.set(0)
         calib_check.grid_forget()
@@ -487,6 +521,11 @@ def start_measurement():
 
         mono = controller.mono
         smu = controller.smu
+
+        if simulate_var.get():
+            live_update_var.set("Simulation mode: virtual instruments connected.")
+        else:
+            live_update_var.set("Hardware instruments connected.")
 
         if mono is None or smu is None:
             messagebox.showerror("Connection Error", "Instruments are not connected.")

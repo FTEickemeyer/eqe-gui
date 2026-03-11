@@ -19,7 +19,7 @@ class MeasurementController:
     def is_measuring(self):
         return self._measurement_running
 
-    def connect_instruments(self, mono=None, smu=None, N=None, nplc=None, interval=None):
+    def connect_instruments(self, mono=None, smu=None, N=None, nplc=None, interval=None, simulate=False):
         if N is None:
             N = self.config["measurement"]["N"]
         if nplc is None:
@@ -33,6 +33,7 @@ class MeasurementController:
             N=N,
             nplc=nplc,
             interval=interval,
+            simulate=simulate,
         )
         return self.mono, self.smu
 

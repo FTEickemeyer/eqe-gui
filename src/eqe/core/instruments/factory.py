@@ -1,10 +1,17 @@
 from eqe.core.instruments.monochromator import Cornerstone130
 from eqe.core.instruments.smu import SMU
+from eqe.core.instruments.simulated import SimulatedMonochromator, SimulatedSMU
 
 GRATING_CHANGE_NM = 850
 
 
-def initialize_system(mono=None, smu=None, N=500, nplc=0.01, interval=0.001):
+def initialize_system(mono=None, smu=None, N=500, nplc=0.01, interval=0.001, simulate=False):
+
+    if simulate:
+        sim_smu = SimulatedSMU()
+        sim_mono = SimulatedMonochromator(smu=sim_smu)
+        return sim_mono, sim_smu
+
     if mono is not None:
         try:
             mono.close()
