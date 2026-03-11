@@ -131,7 +131,7 @@ entry_interval.insert(0, "10")
 entry_interval.grid(row=4, column=1)
 
 # --- Checkboxes ---
-show_raw_var = tk.IntVar(value=1)
+show_raw_var = tk.IntVar(value=0)
 save_raw_var = tk.IntVar(value=1)
 calibration_var = tk.IntVar(value=0)
 stop_when_zero_var = tk.IntVar(value=1)
@@ -288,6 +288,84 @@ def on_live_update(message):
 def on_status(message):
     status_var.set(message)
 
+def configure_eqe_axes(ax_cell, ax_ref, nm_lim):
+    ax_cell.clear()
+    ax_ref.clear()
+
+    ax_cell.grid(True)
+    ax_cell.set_xlabel("Wavelength (nm)")
+    ax_cell.set_ylabel("EQE (%)")
+    ax_ref.set_ylabel("Integrated current (mA/cm²)", labelpad=18)
+
+    ax_ref.yaxis.set_label_position("right")
+    ax_ref.yaxis.set_label_coords(1.10, 0.5)
+
+    ax_cell.set_xlim(nm_lim)
+    ax_cell.set_ylim(bottom=0.0, top=100.0)
+    ax_ref.set_ylim(bottom=0.0)
+
+    ax_cell.set_title("EQE Measurement")
+
+def configure_raw_axes(ax_cell, ax_ref, nm_lim):
+    ax_cell.clear()
+    ax_ref.clear()
+
+    ax_cell.grid(True)
+    ax_cell.set_xlabel("Wavelength (nm)")
+    ax_cell.set_ylabel("Signal cell (A)")
+    ax_ref.set_ylabel("Signal ref. (A)")
+    ax_cell.set_xlim(nm_lim)
+
+    ax_cell.set_title("Raw signal")
+
+
+def init_plot_lines(ax_cell, ax_ref, show_ipce=True):
+
+    if show_ipce:
+
+        # EQE curve
+        line_cell, = ax_cell.plot(
+            [], [],
+            marker="o",
+            linestyle="-",
+            label="EQE"
+        )
+
+        # Integrated current
+        line_ref, = ax_ref.plot(
+            [], [],
+            linestyle="-",
+            marker=None,
+            color="orange",
+            label="Integrated current"
+        )
+
+    else:
+
+        # Raw signals
+        line_cell, = ax_cell.plot(
+            [], [],
+            marker="o",
+            linestyle="-",
+            label="test cell"
+        )
+
+        line_ref, = ax_ref.plot(
+            [], [],
+            marker="o",
+            linestyle="-",
+            label="ref cell"
+        )
+
+    # Combined legend
+    lines1, labels1 = ax_cell.get_legend_handles_labels()
+    lines2, labels2 = ax_ref.get_legend_handles_labels()
+
+    if lines1 or lines2:
+        ax_cell.legend(lines1 + lines2, labels1 + labels2)
+
+    return line_cell, line_ref
+
 
 def on_point_acquired(
     nm,
@@ -306,55 +384,40 @@ def on_point_acquired(
 ):
     ax_cell = gui_plot_state["ax_cell"]
     ax_ref = gui_plot_state["ax_ref"]
+    line_cell = gui_plot_state["line_cell"]
+    line_ref = gui_plot_state["line_ref"]
 
-    ax_cell.cla()
-    ax_ref.cla()
-
-    ax_cell.grid(True)
-    ax_cell.set_xlabel("Wavelength (nm)")
+    x = np.asarray(measured_wavelengths)
 
     if show_IPCE:
-        ax_cell.set_ylabel("EQE (%)")
-        ax_cell.set_xlim(nm_lim)
-        if len(IPCE_arr) > 0:
-            ax_cell.plot(measured_wavelengths, IPCE_arr, marker="o", label="EQE")
-            ax_cell.set_ylim(bottom=0, top=max(0.01, 1.05 * max(IPCE_arr)))
-
-        ax_ref.set_ylabel("Integrated current (mA/cm2)")
-        if len(int_curr_arr) > 0:
-            ax_ref.plot(measured_wavelengths, int_curr_arr, label="Integrated current")
-            ax_ref.set_ylim(bottom=0, top=max(0.0001, 1.05 * int_curr_arr[-1]))
-
-        lines1, labels1 = ax_cell.get_legend_handles_labels()
-        lines2, labels2 = ax_ref.get_legend_handles_labels()
-        if lines1 or lines2:
-            ax_cell.legend(lines1 + lines2, labels1 + labels2)
-
-        ax_cell.set_title("EQE Measurement")
-
+        y_cell = np.asarray(IPCE_arr)
+        y_ref = np.asarray(int_curr_arr)
     elif show_raw_signal:
-        ax_cell.set_ylabel("Signal cell (A)")
-        ax_ref.set_ylabel("Signal ref. (A)")
-        ax_cell.set_xlim(nm_lim)
+        y_cell = np.asarray(signal_B_arr)
+        y_ref = np.asarray(signal_A_arr)
+    else:
+        return
 
-        if len(signal_B_arr) > 0:
-            ax_cell.plot(measured_wavelengths, signal_B_arr, marker="o", label="test cell")
-            y_max = 1.05 * max(signal_B_arr)
-            y_min = min(0, 1.05 * min(signal_B_arr))
-            ax_cell.set_ylim(bottom=y_min, top=y_max if y_max != y_min else y_max + 1e-12)
+    line_cell.set_data(x, y_cell)
+    line_ref.set_data(x, y_ref)
 
-        if len(signal_A_arr) > 0:
-            ax_ref.plot(measured_wavelengths, signal_A_arr, marker="o", label="ref cell")
-            y_max = 1.05 * max(signal_A_arr)
-            y_min = min(0, 1.05 * min(signal_A_arr))
-            ax_ref.set_ylim(bottom=y_min, top=y_max if y_max != y_min else y_max + 1e-12)
+    # Keep x-limits stable
+    ax_cell.set_xlim(nm_lim)
 
-        lines1, labels1 = ax_cell.get_legend_handles_labels()
-        lines2, labels2 = ax_ref.get_legend_handles_labels()
-        if lines1 or lines2:
-            ax_cell.legend(lines1 + lines2, labels1 + labels2)
+    # Update y-limits manually for predictable behavior
+    if len(y_cell) > 0:
+        y_cell_min = min(0.0, float(np.min(y_cell)))
+        y_cell_max = float(np.max(y_cell))
+        if y_cell_max == y_cell_min:
+            y_cell_max = y_cell_min + 1e-12
+        ax_cell.set_ylim(y_cell_min, 1.05 * y_cell_max)
 
-        ax_cell.set_title("Raw signal")
+    if len(y_ref) > 0:
+        y_ref_min = min(0.0, float(np.min(y_ref)))
+        y_ref_max = float(np.max(y_ref))
+        if y_ref_max == y_ref_min:
+            y_ref_max = y_ref_min + 1e-12
+        ax_ref.set_ylim(y_ref_min, 1.05 * y_ref_max)
 
     canvas.draw_idle()
 
@@ -435,26 +498,30 @@ def start_measurement():
             debug=debug
         )
 
-        # Clear and prepare plot
-        for child in fig.get_axes():
-            child.cla()
         fig.clear()
 
-        # Recreate the main axis
         ax_cell = fig.add_subplot(111)
         ax_ref = ax_cell.twinx()
-        ax_cell.grid(True)
-        ax_cell.set_xlabel("Wavelength (nm)")
-        ax_cell.set_ylabel("EQE (%)")
-        ax_cell.set_xlim(nm_lim)
-        ax_cell.set_ylim(bottom=0.0, top=100.0)
-        ax_ref.set_ylabel("Integrated current (mA/cm2)")
-        ax_ref.set_ylim(bottom=0.0, top=10.001)
-        ax_cell.set_title("EQE Measurement")
+        ax_ref.yaxis.set_label_coords(1.10, 0.5)
+        fig.subplots_adjust(right=0.86)
+
+        show_ipce = not show_raw
+
+        if show_ipce:
+            configure_eqe_axes(ax_cell, ax_ref, nm_lim)
+        else:
+            configure_raw_axes(ax_cell, ax_ref, nm_lim)
+
+        line_cell, line_ref = init_plot_lines(ax_cell, ax_ref, show_ipce=show_ipce)
+
         canvas.draw()
 
         gui_plot_state["ax_cell"] = ax_cell
         gui_plot_state["ax_ref"] = ax_ref
+        gui_plot_state["line_cell"] = line_cell
+        gui_plot_state["line_ref"] = line_ref
+        gui_plot_state["show_ipce"] = show_ipce
+        gui_plot_state["nm_lim"] = nm_lim
 
         # Perform measurement live
         controller.run_measurement_async(
