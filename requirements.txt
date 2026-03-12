@@ -8,7 +8,6 @@ decorator==5.2.1
 -e git+https://github.com/FTEickemeyer/eqe-gui.git@1a637aa74a9f2d0c594f4ff45de7eb6b0529e22c#egg=eqe_gui
 executing==2.2.1
 fonttools==4.61.1
-fte-analysis-libraries @ file:///C:/Felix/FTE-analysis-libraries-main
 future==1.0.0
 ipython==9.10.0
 ipython_pygments_lexers==1.1.1
