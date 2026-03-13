@@ -6,7 +6,6 @@ paths:
 calibration:
   reference_cell_file: 71889_L_IPCE_NIST.csv
   active_incident_beam_file: null
-  incident_beam_pattern: incbeamcurr
   grating_change_nm: 850
 
 instruments:

@@ -18,8 +18,6 @@ from eqe.utils.validation import nm_lim_ok
 from eqe.analysis import mmf_legacy as MMF
 from eqe.core.controller import MeasurementController
 
-from FTE_analysis_libraries import Spectrum as spc
-
 controller = MeasurementController()
 
 config = load_config()
@@ -285,7 +283,7 @@ canvas = FigureCanvasTkAgg(fig, master=frame_plot)
 canvas.draw()
 canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-def manual_save():
+def manual_save(autosave=False):
     if state.df_ipce is None:
         messagebox.showwarning("No Data", "No measurement data available to save.")
         return
@@ -324,7 +322,7 @@ def manual_save():
         Jsc,
         MMF_float,
         state.calibration_measurement,
-        False,
+        autosave,
         fp,
     )
     messagebox.showinfo("Data Saved", "Data has been saved successfully.")
@@ -662,7 +660,7 @@ def on_measurement_done(df_result):
         Jsc = np.nan
 
     if autosave_var.get():
-        manual_save()
+        manual_save(autosave=True)
 
 
 def on_measurement_error(exc):
