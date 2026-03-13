@@ -4,30 +4,26 @@ from pathlib import Path
 from eqe.config.load_config import load_config
 
 
-def create_user_directory(data_dir, user, debug=False):
+def create_user_directory(measurements_dir, user, debug=False):
     """
     Create and return the dated user directory for measurement data.
 
     Example:
-        C:\\Users\\...\\Data\\user\\260310_IPCE
+        C:\\Users\\...\\Documents\\EQE\\measurements\\user\\260313_IPCE
     """
-    user_dir = os.path.join(data_dir, user)
-    if not os.path.exists(user_dir):
-        os.makedirs(user_dir)
+    measurements_dir = Path(measurements_dir)
 
-    format_dt = "%Y-%m-%d %H:%M:%S.%f"
-    datetime_object = datetime.datetime.strptime(str(datetime.datetime.now()), format_dt)
-    date = datetime_object.strftime("%y%m%d") + "_IPCE"
+    user_root = measurements_dir / user
+    user_root.mkdir(parents=True, exist_ok=True)
 
-    user_dir = os.path.join(data_dir, user, date)
+    date_folder = datetime.datetime.now().strftime("%y%m%d") + "_IPCE"
+    user_dir = user_root / date_folder
 
     if debug:
-        print(date)
+        print(date_folder)
         print(user_dir)
 
-    if not os.path.exists(user_dir):
-        os.makedirs(user_dir)
-
+    user_dir.mkdir(parents=True, exist_ok=True)
     return user_dir
 
 
