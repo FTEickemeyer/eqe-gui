@@ -1,5 +1,7 @@
 import os
 import datetime
+from pathlib import Path
+from eqe.config.load_config import load_config
 
 
 def create_user_directory(data_dir, user, debug=False):
@@ -27,3 +29,29 @@ def create_user_directory(data_dir, user, debug=False):
         os.makedirs(user_dir)
 
     return user_dir
+
+
+def _expand_path(path_str: str) -> Path:
+    path_str = os.path.expandvars(path_str)
+    path_str = os.path.expanduser(path_str)
+    return Path(path_str).resolve()
+
+
+def ensure_dir(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def get_paths() -> dict:
+    config = load_config()
+    path_cfg = config["paths"]
+
+    measurements_dir = ensure_dir(_expand_path(path_cfg["measurements_dir"]))
+    calibrations_dir = ensure_dir(_expand_path(path_cfg["calibrations_dir"]))
+    logs_dir = ensure_dir(_expand_path(path_cfg["logs_dir"]))
+
+    return {
+        "measurements_dir": measurements_dir,
+        "calibrations_dir": calibrations_dir,
+        "logs_dir": logs_dir,
+    }

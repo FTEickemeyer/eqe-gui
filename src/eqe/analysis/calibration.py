@@ -3,6 +3,10 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
+from eqe.config.load_config import load_config
+from eqe.io.paths import get_paths
+from eqe.io.resources import get_reference_cell_path
+
 GRATING_CHANGE_NM = 850
 
 
@@ -25,8 +29,28 @@ def df_interpolate(df, new_index_arr):
     return df_new
 
 
-def open_calibration(system_dir, nm_lim, calibration_measurement, debug=False):
-    fp_ref_cell = os.path.join(system_dir, "71889_L_IPCE_NIST.csv")
+def find_latest_incident_beam_calibration(calibrations_dir, pattern, grating_change_nm):
+    matches = sorted(
+        calibrations_dir.glob(f"*{pattern}*{grating_change_nm}*.csv"),
+        key=lambda p: p.stat().st_mtime
+    )
+    if not matches:
+        raise FileNotFoundError(
+            f"No incident beam calibration found in {calibrations_dir} "
+            f"matching pattern '{pattern}' and '{grating_change_nm}'."
+        )
+    return matches[-1]
+
+
+def open_calibration(nm_lim, calibration_measurement, debug=False):
+    config = load_config()
+    paths = get_paths()
+
+    ref_filename = config["calibration"]["reference_cell_file"]
+    incident_beam_pattern = config["calibration"]["incident_beam_pattern"]
+    grating_change_nm = config["calibration"]["grating_change_nm"]
+
+    fp_ref_cell = get_reference_cell_path(ref_filename)
     df_ref = pd.read_csv(fp_ref_cell).set_index("Wavelength (nm)").squeeze()
 
     if debug:
@@ -35,30 +59,28 @@ def open_calibration(system_dir, nm_lim, calibration_measurement, debug=False):
         plt.ylabel("IPCE (%)")
         plt.show()
 
-    if not calibration_measurement:
-        fn_root = "incbeamcurr"
-        filenames = os.listdir(system_dir)
-        fn_incbeamcurr = [
-            fn for fn in filenames
-            if (fn_root in fn) and (f"{GRATING_CHANGE_NM}" in fn)
-        ][-1]
+    if calibration_measurement:
+        return None, df_ref
 
-        if debug:
-            print(fn_incbeamcurr)
+    fp_incbeamcurr = find_latest_incident_beam_calibration(
+        calibrations_dir=paths["calibrations_dir"],
+        pattern=incident_beam_pattern,
+        grating_change_nm=grating_change_nm,
+    )
 
-        fp_incbeamcurr = os.path.join(system_dir, fn_incbeamcurr)
-        df_incbeamcurr = pd.read_csv(fp_incbeamcurr).set_index("Wavelength (nm)")
+    if debug:
+        print(f"Using incident beam calibration: {fp_incbeamcurr}")
 
-        nm_arr = np.arange(nm_lim[0], nm_lim[1] + 1, 1)
-        df_incbeamcurr = df_interpolate(df_incbeamcurr, nm_arr)
+    df_incbeamcurr = pd.read_csv(fp_incbeamcurr).set_index("Wavelength (nm)")
 
-        if debug:
-            df_incbeamcurr.plot()
-            plt.show()
-            df_incbeamcurr["incident beam current (A)/intSiref current (A)"].plot()
-            plt.title("df_incbeamcurr")
-            plt.show()
-    else:
-        df_incbeamcurr = None
+    nm_arr = np.arange(nm_lim[0], nm_lim[1] + 1, 1)
+    df_incbeamcurr = df_interpolate(df_incbeamcurr, nm_arr)
+
+    if debug:
+        df_incbeamcurr.plot()
+        plt.show()
+        df_incbeamcurr["incident beam current (A)/intSiref current (A)"].plot()
+        plt.title("df_incbeamcurr")
+        plt.show()
 
     return df_incbeamcurr, df_ref

@@ -2,7 +2,6 @@ paths:
   measurements_dir: ~/Documents/EQE/measurements
   calibrations_dir: ~/Documents/EQE/calibrations
   logs_dir: ~/AppData/Local/eqe/logs
-  system_dir: "C:/Users/labo/Documents/Python"
   data_dir: ~/Documents/Data
 
 calibration:

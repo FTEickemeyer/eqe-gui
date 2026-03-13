@@ -1,6 +1,9 @@
-import os
 import datetime
+from pathlib import Path
+
 import pandas as pd
+
+from eqe.io.paths import get_paths
 
 
 def df_interpolate(df, new_index_arr):
@@ -24,28 +27,29 @@ def save_data(
     df_ref,
     sample_name,
     user_dir,
-    system_dir,
     calibration_measurement,
     save_raw_data=False,
     debug=False,
     fig=None,
     grating_change_nm=850,
 ):
+    user_dir = Path(user_dir)
+
     dat_time = str(datetime.datetime.now())
     dat_time_file = dat_time.split(".")[0].replace(":", "-").replace(" ", "_time")
 
-    fp_IPCE = os.path.join(user_dir, f"EQE_{sample_name}_date{dat_time_file}.csv")
+    fp_ipce = user_dir / f"EQE_{sample_name}_date{dat_time_file}.csv"
 
     if save_raw_data or calibration_measurement:
-        df.to_csv(fp_IPCE)
+        df.to_csv(fp_ipce)
     else:
-        df[["EQE (%)", "Integrated current (mA/cm2)"]].to_csv(fp_IPCE)
+        df[["EQE (%)", "Integrated current (mA/cm2)"]].to_csv(fp_ipce)
 
     if fig is not None:
-        fp_fig = os.path.join(user_dir, f"EQE_{sample_name}_date{dat_time_file}.png")
+        fp_fig = user_dir / f"EQE_{sample_name}_date{dat_time_file}.png"
         fig.savefig(fp_fig, dpi=300, bbox_inches="tight")
 
-    print(f"File saved: {fp_IPCE}")
+    print(f"File saved: {fp_ipce}")
 
     if calibration_measurement:
         df_ref_interpol = df_interpolate(df_ref, df.index)
@@ -55,10 +59,12 @@ def save_data(
             df["incident beam current (A)"] / df["Current ref-chA (A)"]
         )
 
-        fp_incbeamcurr = os.path.join(
-            system_dir,
-            f"incbeamcurr_{sample_name}_{grating_change_nm}nm-wavelength-change_date{dat_time_file}.csv"
+        calibration_dir = get_paths()["calibrations_dir"]
+        fp_incbeamcurr = (
+            calibration_dir
+            / f"incbeamcurr_{sample_name}_{grating_change_nm}nm-wavelength-change_date{dat_time_file}.csv"
         )
+
         df[
             [
                 "Current ref-chA (A)",
@@ -70,4 +76,4 @@ def save_data(
         if debug:
             df["incident beam current (A)/intSiref current (A)"].plot()
 
-    return fp_IPCE
+    return fp_ipce

@@ -4,16 +4,13 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
-import datetime
-import csv
-import os
 from pathlib import Path
 
 # --- Instrument and libraries ---
 from eqe.config.load_config import load_config
 from eqe.core.models import MeasurementParams
 from eqe.analysis.calibration import open_calibration
-from eqe.io.paths import create_user_directory
+from eqe.io.paths import get_paths, create_user_directory
 from eqe.io.data_io import save_data
 from eqe.io.logging import append_to_log
 from eqe.app.state import AppState
@@ -26,9 +23,7 @@ from FTE_analysis_libraries import Spectrum as spc
 controller = MeasurementController()
 
 config = load_config()
-
-system_dir = config["paths"]["system_dir"]
-data_dir = config["paths"]["data_dir"]
+paths = get_paths()
 
 gui_plot_state = {}
 state = AppState()
@@ -82,29 +77,6 @@ matplotlib.rcParams['toolbar'] = 'none'
 
 # --- Instrument Initialization ---
 debug = False
-
-# --- Log file path ---
-log_file_path = os.path.join(system_dir, "EQE_measurement_log.csv")
-
-# --- Logging Function ---
-def append_to_log(user, sample, Jsc, MMF, calibration_measurement, autosave, filename):
-    log_exists = os.path.exists(log_file_path)
-    with open(log_file_path, mode='a', newline='') as log_file:
-        writer = csv.writer(log_file)
-        if not log_exists:
-            writer.writerow(["Timestamp", "User", "Sample", "Jsc (mA/cm²)", "MMF", "Calibration", "Autosave", "Filename"])
-        writer.writerow([
-            datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            user, sample, f"{Jsc:.2f}", f"{MMF:.3f}",
-            calibration_measurement, autosave, filename
-        ])
-
-
-#mono = globals().get('mono', None)
-#smu = globals().get('smu', None)
-#mono, smu = EQE.initialize_system(mono, smu, N=500, nplc=0.01, interval=0.002)
-#mono.goto_nm(550.)
-#mono.shutter(False)
 
 # --- GUI ---
 root = tk.Tk()
@@ -299,7 +271,7 @@ def manual_save():
         return
 
     user = entry_user.get().strip()
-    state.user_dir = create_user_directory(data_dir, user, debug=debug)
+    state.user_dir = create_user_directory(paths["measurements_dir"], user, debug=debug)
     sample = entry_sample.get().strip()
 
     if not state.calibration_measurement:
@@ -321,7 +293,6 @@ def manual_save():
         state.df_ref,
         sample,
         state.user_dir,
-        system_dir,
         state.calibration_measurement,
         save_raw_data=state.save_raw,
         debug=debug,
@@ -563,7 +534,7 @@ def start_measurement():
 
         toggle_calib_checkbox()  # ensure calibration checkbox is updated
 
-        state.user_dir = create_user_directory(data_dir, user, debug=debug)
+        state.user_dir = create_user_directory(paths["measurements_dir"], user, debug=debug)
         nm_lim = (wl_start, wl_stop)
         nm_lim = nm_lim_ok(nm_lim, state.calibration_measurement, debug=debug)
 
@@ -585,7 +556,6 @@ def start_measurement():
             mono.filter = mono.filter_wheel_position
 
         df_incbeamcurr, state.df_ref = open_calibration(
-            system_dir,
             nm_lim,
             state.calibration_measurement,
             debug=debug
