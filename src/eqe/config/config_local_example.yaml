@@ -2,3 +2,6 @@ paths:
   measurements_dir: C:/Users/labo/Documents/EQE/measurements
   calibrations_dir: C:/Users/labo/Documents/EQE/calibrations
   logs_dir: C:/Users/labo/AppData/Local/eqe/logs
+
+calibration:
+  active_incident_beam_file: incbeamcurr_Siref_850nm-wavelength-change_date2025-10-23_time10-49-42.csv
