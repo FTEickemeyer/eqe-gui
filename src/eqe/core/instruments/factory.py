@@ -1,8 +1,7 @@
 from eqe.core.instruments.monochromator import Cornerstone130
 from eqe.core.instruments.smu import SMU
 from eqe.core.instruments.simulated import SimulatedMonochromator, SimulatedSMU
-
-GRATING_CHANGE_NM = 850
+from eqe.config.load_config import load_config
 
 
 def initialize_system(
@@ -32,7 +31,9 @@ def initialize_system(
         except Exception:
             print("Could not close previous SMU connection.")
 
-    mono = Cornerstone130("COM2", grating_change_nm=GRATING_CHANGE_NM)
+    config = load_config()
+    grating_change_nm = config["calibration"]["grating_change_nm"]
+    mono = Cornerstone130("COM2", grating_change_nm=grating_change_nm)
     print(mono.info)
 
     smu = SMU(address="GPIB1::24::INSTR", N=N, nplc=nplc, interval=interval)

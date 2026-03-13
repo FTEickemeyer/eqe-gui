@@ -7,9 +7,6 @@ from eqe.config.load_config import load_config
 from eqe.io.paths import get_paths
 from eqe.io.resources import get_reference_cell_path
 
-GRATING_CHANGE_NM = 850
-
-
 def df_interpolate(df, new_index_arr):
     """
     Interpolate a dataframe to a new index array.
@@ -29,7 +26,9 @@ def df_interpolate(df, new_index_arr):
     return df_new
 
 
-def find_latest_incident_beam_calibration(calibrations_dir, pattern, grating_change_nm):
+def find_latest_incident_beam_calibration(calibrations_dir, pattern):
+    config = load_config()
+    grating_change_nm = config["calibration"]["grating_change_nm"]
     matches = sorted(
         calibrations_dir.glob(f"*{pattern}*{grating_change_nm}*.csv"),
         key=lambda p: p.stat().st_mtime
@@ -65,7 +64,6 @@ def open_calibration(nm_lim, calibration_measurement, debug=False):
     fp_incbeamcurr = find_latest_incident_beam_calibration(
         calibrations_dir=paths["calibrations_dir"],
         pattern=incident_beam_pattern,
-        grating_change_nm=grating_change_nm,
     )
 
     if debug:

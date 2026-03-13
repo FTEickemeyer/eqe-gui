@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 from eqe.io.paths import get_paths
-
+from eqe.config.load_config import load_config
 
 def df_interpolate(df, new_index_arr):
     """
@@ -31,7 +31,6 @@ def save_data(
     save_raw_data=False,
     debug=False,
     fig=None,
-    grating_change_nm=850,
 ):
     user_dir = Path(user_dir)
 
@@ -60,6 +59,8 @@ def save_data(
         )
 
         calibration_dir = get_paths()["calibrations_dir"]
+        config = load_config()
+        grating_change_nm = config["calibration"]["grating_change_nm"]
         fp_incbeamcurr = (
             calibration_dir
             / f"incbeamcurr_{sample_name}_{grating_change_nm}nm-wavelength-change_date{dat_time_file}.csv"
