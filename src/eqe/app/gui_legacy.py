@@ -28,6 +28,16 @@ paths = get_paths()
 gui_plot_state = {}
 state = AppState()
 
+def get_active_calibration_text():
+    try:
+        cfg = load_config()
+        active_file = cfg.get("calibration", {}).get("active_incident_beam_file", None)
+        if active_file:
+            return f"Active calibration: {active_file}"
+        return "Active calibration: not set"
+    except Exception as e:
+        return f"Active calibration: error ({e})"
+
 def tk_dispatch(callback, *args, **kwargs):
     """
     Ensures GUI updates always run on the Tk main thread.
@@ -238,6 +248,16 @@ exit_button.grid(row=0, column=3, padx=5)
 live_update_var = tk.StringVar()
 live_update_label = tk.Label(frame_inputs, textvariable=live_update_var, fg="black", justify="left", wraplength=350)
 live_update_label.grid(row=13, column=0, columnspan=2, pady=(5, 0))
+
+active_calibration_var = tk.StringVar(value=get_active_calibration_text())
+active_calibration_label = tk.Label(
+    frame_inputs,
+    textvariable=active_calibration_var,
+    fg="darkgreen",
+    justify="left",
+    wraplength=350,
+)
+active_calibration_label.grid(row=15, column=0, columnspan=2, pady=(5, 0))
 
 # --- Progress Bar ---
 #progress = ttk.Progressbar(frame_inputs, orient="horizontal", length=200, mode="determinate")
