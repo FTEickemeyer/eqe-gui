@@ -1,6 +1,14 @@
 paths:
+  measurements_dir: ~/Documents/EQE/measurements
+  calibrations_dir: ~/Documents/EQE/calibrations
+  logs_dir: ~/AppData/Local/eqe/logs
   system_dir: "C:/Users/labo/Documents/Python"
-  data_dir: "data"
+  data_dir: ~/Documents/Data
+
+calibration:
+  reference_cell_file: 71889_L_IPCE_NIST.csv
+  incident_beam_pattern: incbeamcurr
+  grating_change_nm: 850
 
 instruments:
   mono_port: "COM2"

@@ -1,2 +1,5 @@
 paths:
-  data_dir: "C:/Users/labo/Documents/Data"
+  measurements_dir: C:/Users/labo/Documents/EQE/measurements
+  calibrations_dir: C:/Users/labo/Documents/EQE/calibrations
+  logs_dir: C:/Users/labo/AppData/Local/eqe/logs
+  data_dir: C:/Users/labo/Documents/Data
