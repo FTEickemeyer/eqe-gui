@@ -151,22 +151,30 @@ calib_check = ttk.Checkbutton(
 )
 
 def update_simulation_controls():
+    user_is_felix = entry_user.get().strip().lower() == "felix"
+
+    if not user_is_felix:
+        simulate_var.set(0)
+        simulate_profile_box.config(state="disabled")
+        return
+
     if simulate_var.get():
         simulate_profile_box.config(state="readonly")
     else:
         simulate_profile_box.config(state="disabled")
 
-ttk.Checkbutton(
+
+simulate_check = ttk.Checkbutton(
     frame_inputs,
     text="Simulation mode",
     variable=simulate_var,
     command=update_simulation_controls,
-).grid(row=6, column=0, columnspan=2, sticky='w')
+)
 
-ttk.Label(
+simulate_profile_label = ttk.Label(
     frame_inputs,
     text="Sim profile"
-).grid(row=7, column=0, sticky='w')
+)
 
 simulate_profile_box = ttk.Combobox(
     frame_inputs,
@@ -175,9 +183,6 @@ simulate_profile_box = ttk.Combobox(
     state="readonly",
     width=18,
 )
-simulate_profile_box.grid(row=7, column=1, sticky='ew')
-
-update_simulation_controls()
 
 ttk.Checkbutton(
     frame_inputs,
@@ -213,7 +218,25 @@ def toggle_calib_checkbox():
         calibration_var.set(0)
         calib_check.grid_forget()
 
-entry_user.bind("<FocusOut>", lambda e: toggle_calib_checkbox())
+def toggle_simulation_controls():
+    if entry_user.get().strip().lower() == "felix":
+        simulate_check.grid(row=6, column=0, columnspan=2, sticky='w')
+        simulate_profile_label.grid(row=7, column=0, sticky='w')
+        simulate_profile_box.grid(row=7, column=1, sticky='ew')
+    else:
+        simulate_var.set(0)
+        simulate_check.grid_forget()
+        simulate_profile_label.grid_forget()
+        simulate_profile_box.grid_forget()
+
+    update_simulation_controls()
+
+def on_user_changed(event=None):
+    toggle_calib_checkbox()
+    toggle_simulation_controls()
+
+entry_user.bind("<FocusOut>", on_user_changed)
+entry_user.bind("<KeyRelease>", on_user_changed)
 
 # --- Button Frame for Even Spacing ---
 button_frame = tk.Frame(frame_inputs)
@@ -550,8 +573,6 @@ def start_measurement():
             messagebox.showerror("Input Error", "Start wavelength must be less than stop wavelength.")
             return
 
-        toggle_calib_checkbox()  # ensure calibration checkbox is updated
-
         state.user_dir = create_user_directory(paths["measurements_dir"], user, debug=debug)
         nm_lim = (wl_start, wl_stop)
         nm_lim = nm_lim_ok(nm_lim, state.calibration_measurement, debug=debug)
@@ -689,4 +710,8 @@ def on_closing():
     root.destroy()
 
 root.protocol("WM_DELETE_WINDOW", on_closing)
+
+toggle_calib_checkbox()
+toggle_simulation_controls()
+
 root.mainloop()
