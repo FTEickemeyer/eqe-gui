@@ -1,6 +1,6 @@
 paths:
   system_dir: "C:/Users/labo/Documents/Python"
-  data_dir: "C:/Users/labo/Documents/Data"
+  data_dir: "data"
 
 instruments:
   mono_port: "COM2"

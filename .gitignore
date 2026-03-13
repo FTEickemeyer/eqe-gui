@@ -30,3 +30,6 @@ results/
 # If you use these
 *.png
 *.pdf
+
+# Ignore the local config
+config/config_local.yaml

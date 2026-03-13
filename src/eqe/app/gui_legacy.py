@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 # --- Instrument and libraries ---
-from eqe.config.config_loader import load_config
+from eqe.config.load_config import load_config
 from eqe.core.models import MeasurementParams
 from eqe.analysis.calibration import open_calibration
 from eqe.io.paths import create_user_directory

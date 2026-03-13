@@ -1,6 +1,6 @@
 import threading
 
-from eqe.config.config_loader import load_config
+from eqe.config.load_config import load_config
 from eqe.core.instruments.factory import initialize_system
 from eqe.core.measurement_engine import perform_measurement
 
