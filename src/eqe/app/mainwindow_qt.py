@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from eqe.core.measurement_config import MeasurementConfig
 from eqe.app.widgets.session_panel import SessionPanel
 # Import GUI visibility specification
 from eqe.app.qt_models import (
@@ -43,6 +44,7 @@ from eqe.app.widgets.session_panel import SessionPanel
 from eqe.app.widgets.metadata_panel import MetadataPanel
 from eqe.app.widgets.scan_panel import ScanPanel
 from eqe.app.widgets.log_panel import LogPanel
+
 
 
 class MainWindow(QMainWindow):
@@ -97,10 +99,13 @@ class MainWindow(QMainWindow):
 
     def _on_start(self):
         """
-        Placeholder start action.
+        Called when the Start button is pressed.
         """
 
-        print("Start requested")
+        config = self.collect_measurement_config()
+
+        self.log_panel.append("Starting measurement")
+        self.log_panel.append(str(config))
 
 
     def _on_stop(self):
@@ -117,6 +122,40 @@ class MainWindow(QMainWindow):
         """
 
         print("Manual save requested")
+
+
+    def collect_measurement_config(self):
+        """
+        Collect all GUI parameters and build a MeasurementConfig object.
+        """
+
+        metadata = self.metadata_panel.get_values()
+        scan = self.scan_panel.get_values()
+
+        config = MeasurementConfig(
+
+            # Metadata
+            sample_name=metadata["sample_name"],
+            comments=metadata["comments"],
+            cell_area_cm2=metadata["cell_area_cm2"],
+
+            # Scan
+            start_nm=scan["start_nm"],
+            stop_nm=scan["stop_nm"],
+            step_nm=scan["step_nm"],
+            direction=scan["direction"],
+
+            # Session
+            user=self.session_panel.get_user(),
+            mode=self.session_panel.get_mode(),
+
+            # Simulation
+            simulation=self.session_panel.sim_checkbox.isChecked(),
+            simulation_profile=self.session_panel.sim_profile_combo.currentText(),
+        )
+
+        return config
+
 
     def update_mode_visibility(self, mode):
         """
