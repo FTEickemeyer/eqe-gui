@@ -99,6 +99,11 @@ class MainWindow(QMainWindow):
             [1.5, 5.2, 12.3, 15.8, 17.1]
         )
 
+        # storage for measurement data during scans
+        self._wavelengths = []
+        self._eqe_values = []
+        self._current_values = []
+
 
     def _on_mode_changed(self, mode):
         """
@@ -117,9 +122,25 @@ class MainWindow(QMainWindow):
         """
 
         config = self.collect_measurement_config()
+        # reset measurement storage
+        self._wavelengths = []
+        self._eqe_values = []
+        self._current_values = []
 
         self.log_panel.append("Starting measurement")
         self.log_panel.append(str(config))
+
+        import numpy as np
+
+        w = np.linspace(350, 850, 20)
+
+        for wl in w:
+
+            eqe = 60 * np.exp(-(wl - 600)**2 / 20000)
+
+            current = wl / 50
+
+            self.on_point_acquired(wl, eqe, current)
 
 
     def _on_stop(self):
@@ -174,6 +195,49 @@ class MainWindow(QMainWindow):
         )
 
         return config
+
+
+    def on_live_update(self, eqe, cell_current, ref_current):
+        """
+        Live update during a measurement (high frequency).
+
+        Updates the numeric readout panel.
+        """
+
+        self.live_numeric_panel.update_values(
+            eqe,
+            cell_current,
+            ref_current
+        )
+
+
+    def on_point_acquired(self, wavelength, eqe, integrated_current):
+        """
+        Called when a wavelength point is finished.
+        """
+
+        self._wavelengths.append(wavelength)
+        self._eqe_values.append(eqe)
+        self._current_values.append(integrated_current)
+
+        # update plots
+        self.eqe_plot_widget.update_curve(
+            self._wavelengths,
+            self._eqe_values
+        )
+
+        self.current_plot_widget.update_curve(
+            self._wavelengths,
+            self._current_values
+        )
+
+
+    def on_status(self, message):
+        """
+        Controller status messages.
+        """
+
+        self.log_panel.append(message)
 
 
     def update_mode_visibility(self, mode):
