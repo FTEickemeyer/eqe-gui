@@ -16,6 +16,8 @@ Main area:
 Later we will insert real widgets into the placeholder group boxes.
 """
 
+from eqe.app.widgets.session_panel import SessionPanel
+
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -42,6 +44,39 @@ class MainWindow(QMainWindow):
         # Build the GUI
         self._build_ui()
 
+
+    def _on_mode_changed(self, mode):
+        """
+        Called when the measurement mode changes.
+        """
+
+        print(f"Mode changed to: {mode}")
+
+
+    def _on_start(self):
+        """
+        Placeholder start action.
+        """
+
+        print("Start requested")
+
+
+    def _on_stop(self):
+        """
+        Placeholder stop action.
+        """
+
+        print("Stop requested")
+
+
+    def _on_save(self):
+        """
+        Placeholder save action.
+        """
+
+        print("Manual save requested")
+
+
     def _build_ui(self):
         """
         Construct the main window layout.
@@ -65,16 +100,16 @@ class MainWindow(QMainWindow):
         # 1. Top control bar (Session / Run Control)
         # ----------------------------------------------------------
 
-        self.session_group = QGroupBox("Session / Run Control")
+        self.session_panel = SessionPanel()
 
-        session_layout = QHBoxLayout()
+        # Connect signals
+        self.session_panel.mode_changed.connect(self._on_mode_changed)
+        self.session_panel.start_clicked.connect(self._on_start)
+        self.session_panel.stop_clicked.connect(self._on_stop)
+        self.session_panel.save_clicked.connect(self._on_save)
 
-        # Placeholder label for now
-        session_layout.addWidget(QLabel("Session controls placeholder"))
+        main_layout.addWidget(self.session_panel)
 
-        self.session_group.setLayout(session_layout)
-
-        main_layout.addWidget(self.session_group)
 
         # ----------------------------------------------------------
         # 2. Main horizontal splitter
@@ -179,3 +214,4 @@ class MainWindow(QMainWindow):
         # ----------------------------------------------------------
 
         splitter.setSizes([400, 1000])
+
