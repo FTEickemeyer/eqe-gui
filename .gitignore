@@ -23,9 +23,6 @@ Thumbs.db
 data/
 output/
 results/
-*.csv
-*.txt
-*.dat
 
 # If you use these
 *.png

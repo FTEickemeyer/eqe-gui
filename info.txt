@@ -1,0 +1,16 @@
+cd /d C:\Users\labo\Documents\code\eqe-gui
+.venv\Scripts\activate
+
+python -m eqe
+
+git add .
+git commit -m "text"
+git push
+
+git pull
+
+next activity:
+data_dir in paths.py
+
+search with everything:
+nocase:C:\Users\labo\Documents\code\eqe-gui\src\eqe\ content:data_dir 

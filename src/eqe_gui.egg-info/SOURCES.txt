@@ -1,0 +1,15 @@
+pyproject.toml
+src/eqe/__init__.py
+src/eqe/__main__.py
+src/eqe/analysis/__init__.py
+src/eqe/analysis/mmf_legacy.py
+src/eqe/app/__init__.py
+src/eqe/app/gui_legacy.py
+src/eqe/core/__init__.py
+src/eqe/core/eqe_main_legacy.py
+src/eqe/instruments/__init__.py
+src/eqe/io/__init__.py
+src/eqe_gui.egg-info/PKG-INFO
+src/eqe_gui.egg-info/SOURCES.txt
+src/eqe_gui.egg-info/dependency_links.txt
+src/eqe_gui.egg-info/top_level.txt
