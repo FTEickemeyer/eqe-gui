@@ -42,6 +42,7 @@ from eqe.app.qt_models import (
 from eqe.app.widgets.session_panel import SessionPanel
 from eqe.app.widgets.metadata_panel import MetadataPanel
 from eqe.app.widgets.scan_panel import ScanPanel
+from eqe.app.widgets.log_panel import LogPanel
 
 
 class MainWindow(QMainWindow):
@@ -79,6 +80,8 @@ class MainWindow(QMainWindow):
         # --------------------------------------------------
         initial_mode = self.session_panel.get_mode()
         self.update_mode_visibility(initial_mode)
+
+        self.log_panel.append("GUI initialized")
 
 
     def _on_mode_changed(self, mode):
@@ -268,10 +271,15 @@ class MainWindow(QMainWindow):
         self.readout_group.layout().addWidget(QLabel("Numeric readout placeholder"))
         live_layout.addWidget(self.readout_group)
 
-        # Log / status
+        # Status / log
         self.log_group = QGroupBox("Status / Log")
         self.log_group.setLayout(QVBoxLayout())
-        self.log_group.layout().addWidget(QLabel("Log output placeholder"))
+
+        # Create the real log panel
+        self.log_panel = LogPanel()
+
+        self.log_group.layout().addWidget(self.log_panel)
+
         live_layout.addWidget(self.log_group)
 
         # ----------------------------------------------------------
