@@ -1,74 +1,181 @@
 """
 Main window for the PySide6 EQE/IPCE GUI.
 
-At this stage the window is intentionally very simple.
-Its purpose is only to verify that:
+This version establishes the **core layout skeleton** that will remain
+stable for the entire application.
 
-- PySide6 runs correctly
-- the project imports work
-- the basic window structure exists
+Structure:
 
-More panels and widgets will be added in later steps.
+Top bar:
+    Session / Run Control
+
+Main area:
+    Left  -> Measurement setup
+    Right -> Live monitoring
+
+Later we will insert real widgets into the placeholder group boxes.
 """
 
-# Import core Qt widgets used for building the window
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
     QVBoxLayout,
+    QHBoxLayout,
+    QSplitter,
     QLabel,
+    QGroupBox,
 )
+from PySide6.QtCore import Qt
 
 
 class MainWindow(QMainWindow):
-    """
-    Main application window.
-
-    QMainWindow is the standard top-level window type in Qt.
-    It supports:
-    - central widgets
-    - menus
-    - toolbars
-    - status bars
-    - dock widgets
-    """
 
     def __init__(self):
         super().__init__()
 
-        # Set the window title shown in the title bar
+        # Window title
         self.setWindowTitle("EQE / IPCE Measurement GUI (PySide6)")
 
-        # Optional: set a reasonable initial window size
-        self.resize(1200, 800)
+        # Initial window size
+        self.resize(1400, 900)
 
-        # Build the GUI layout
+        # Build the GUI
         self._build_ui()
 
     def _build_ui(self):
         """
-        Construct the basic user interface.
+        Construct the main window layout.
 
-        For now this contains only a placeholder label.
-        Later this method will create the full GUI layout.
+        The layout consists of:
+
+        - Top session control bar
+        - Horizontal splitter dividing setup and monitoring
         """
 
-        # Create the central widget.
-        # In Qt, a QMainWindow requires a central widget that
-        # holds the main layout.
+        # ---- Central widget ----
+        # QMainWindow requires a central widget to host layouts
         central_widget = QWidget()
-
-        # Set this widget as the main content area of the window
         self.setCentralWidget(central_widget)
 
-        # Create a vertical layout for the central widget
-        layout = QVBoxLayout()
+        # Main vertical layout of the window
+        main_layout = QVBoxLayout()
+        central_widget.setLayout(main_layout)
 
-        # Assign the layout to the central widget
-        central_widget.setLayout(layout)
+        # ----------------------------------------------------------
+        # 1. Top control bar (Session / Run Control)
+        # ----------------------------------------------------------
 
-        # Add a placeholder label so we can see something
-        label = QLabel("PySide6 GUI initialized successfully")
+        self.session_group = QGroupBox("Session / Run Control")
 
-        # Add the label to the layout
-        layout.addWidget(label)
+        session_layout = QHBoxLayout()
+
+        # Placeholder label for now
+        session_layout.addWidget(QLabel("Session controls placeholder"))
+
+        self.session_group.setLayout(session_layout)
+
+        main_layout.addWidget(self.session_group)
+
+        # ----------------------------------------------------------
+        # 2. Main horizontal splitter
+        # ----------------------------------------------------------
+
+        # Splitter allows the user to resize left/right panels
+        splitter = QSplitter(Qt.Horizontal)
+
+        main_layout.addWidget(splitter)
+
+        # ----------------------------------------------------------
+        # LEFT PANEL — Measurement setup
+        # ----------------------------------------------------------
+
+        setup_widget = QWidget()
+        setup_layout = QVBoxLayout()
+        setup_widget.setLayout(setup_layout)
+
+        splitter.addWidget(setup_widget)
+
+        # Metadata section
+        self.metadata_group = QGroupBox("Sample / Metadata")
+        self.metadata_group.setLayout(QVBoxLayout())
+        self.metadata_group.layout().addWidget(QLabel("Metadata panel placeholder"))
+        setup_layout.addWidget(self.metadata_group)
+
+        # Scan settings
+        self.scan_group = QGroupBox("Spectral Scan")
+        self.scan_group.setLayout(QVBoxLayout())
+        self.scan_group.layout().addWidget(QLabel("Scan settings placeholder"))
+        setup_layout.addWidget(self.scan_group)
+
+        # Electrical bias
+        self.bias_group = QGroupBox("Electrical Bias")
+        self.bias_group.setLayout(QVBoxLayout())
+        self.bias_group.layout().addWidget(QLabel("Bias controls placeholder"))
+        setup_layout.addWidget(self.bias_group)
+
+        # Optical modulation
+        self.modulation_group = QGroupBox("Optical Modulation / Lock-in")
+        self.modulation_group.setLayout(QVBoxLayout())
+        self.modulation_group.layout().addWidget(QLabel("Lock-in controls placeholder"))
+        setup_layout.addWidget(self.modulation_group)
+
+        # Background illumination
+        self.background_group = QGroupBox("Background Illumination")
+        self.background_group.setLayout(QVBoxLayout())
+        self.background_group.layout().addWidget(QLabel("Background light controls placeholder"))
+        setup_layout.addWidget(self.background_group)
+
+        # Calibration and saving
+        self.calibration_group = QGroupBox("Calibration / Saving")
+        self.calibration_group.setLayout(QVBoxLayout())
+        self.calibration_group.layout().addWidget(QLabel("Calibration panel placeholder"))
+        setup_layout.addWidget(self.calibration_group)
+
+        # Advanced acquisition settings
+        self.advanced_group = QGroupBox("Advanced Acquisition Settings")
+        self.advanced_group.setLayout(QVBoxLayout())
+        self.advanced_group.layout().addWidget(QLabel("Advanced controls placeholder"))
+        setup_layout.addWidget(self.advanced_group)
+
+        # Stretch ensures panels stay at the top
+        setup_layout.addStretch()
+
+        # ----------------------------------------------------------
+        # RIGHT PANEL — Live monitoring
+        # ----------------------------------------------------------
+
+        live_widget = QWidget()
+        live_layout = QVBoxLayout()
+        live_widget.setLayout(live_layout)
+
+        splitter.addWidget(live_widget)
+
+        # Live EQE plot
+        self.eqe_plot_group = QGroupBox("Live EQE")
+        self.eqe_plot_group.setLayout(QVBoxLayout())
+        self.eqe_plot_group.layout().addWidget(QLabel("EQE plot placeholder"))
+        live_layout.addWidget(self.eqe_plot_group)
+
+        # Secondary plot
+        self.secondary_plot_group = QGroupBox("Secondary Live Signal")
+        self.secondary_plot_group.setLayout(QVBoxLayout())
+        self.secondary_plot_group.layout().addWidget(QLabel("Secondary plot placeholder"))
+        live_layout.addWidget(self.secondary_plot_group)
+
+        # Numeric readout
+        self.readout_group = QGroupBox("Live Readout")
+        self.readout_group.setLayout(QVBoxLayout())
+        self.readout_group.layout().addWidget(QLabel("Numeric readout placeholder"))
+        live_layout.addWidget(self.readout_group)
+
+        # Log / status
+        self.log_group = QGroupBox("Status / Log")
+        self.log_group.setLayout(QVBoxLayout())
+        self.log_group.layout().addWidget(QLabel("Log output placeholder"))
+        live_layout.addWidget(self.log_group)
+
+        # ----------------------------------------------------------
+        # Initial splitter proportions
+        # ----------------------------------------------------------
+
+        splitter.setSizes([400, 1000])
