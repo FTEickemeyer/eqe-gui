@@ -47,6 +47,7 @@ from eqe.app.widgets.log_panel import LogPanel
 from eqe.app.widgets.bias_panel import BiasPanel
 from eqe.app.widgets.live_numeric_panel import LiveNumericPanel
 from eqe.app.widgets.eqe_plot_widget import EQEPlotWidget
+from eqe.app.widgets.integrated_current_plot_widget import IntegratedCurrentPlotWidget
 
 
 class MainWindow(QMainWindow):
@@ -91,6 +92,11 @@ class MainWindow(QMainWindow):
         self.eqe_plot_widget.update_curve(
             [400, 500, 600, 700, 800],
             [20, 45, 60, 50, 30]
+        )
+
+        self.current_plot_widget.update_curve(
+            [400, 500, 600, 700, 800],
+            [1.5, 5.2, 12.3, 15.8, 17.1]
         )
 
 
@@ -319,11 +325,15 @@ class MainWindow(QMainWindow):
 
         live_layout.addWidget(self.eqe_plot_group)
 
-        # Secondary plot
-        self.secondary_plot_group = QGroupBox("Secondary Live Signal")
-        self.secondary_plot_group.setLayout(QVBoxLayout())
-        self.secondary_plot_group.layout().addWidget(QLabel("Secondary plot placeholder"))
-        live_layout.addWidget(self.secondary_plot_group)
+        # Integrated current plot
+        self.current_plot_group = QGroupBox("Integrated Current")
+        self.current_plot_group.setLayout(QVBoxLayout())
+
+        self.current_plot_widget = IntegratedCurrentPlotWidget()
+
+        self.current_plot_group.layout().addWidget(self.current_plot_widget)
+
+        live_layout.addWidget(self.current_plot_group)
 
         # Live numeric readout
         self.readout_group = QGroupBox("Live Readout")
