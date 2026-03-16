@@ -46,6 +46,7 @@ from eqe.app.widgets.scan_panel import ScanPanel
 from eqe.app.widgets.log_panel import LogPanel
 from eqe.app.widgets.bias_panel import BiasPanel
 from eqe.app.widgets.live_numeric_panel import LiveNumericPanel
+from eqe.app.widgets.eqe_plot_widget import EQEPlotWidget
 
 
 class MainWindow(QMainWindow):
@@ -85,6 +86,12 @@ class MainWindow(QMainWindow):
         self.update_mode_visibility(initial_mode)
 
         self.log_panel.append("GUI initialized")
+
+        # temporary test data
+        self.eqe_plot_widget.update_curve(
+            [400, 500, 600, 700, 800],
+            [20, 45, 60, 50, 30]
+        )
 
 
     def _on_mode_changed(self, mode):
@@ -305,7 +312,11 @@ class MainWindow(QMainWindow):
         # Live EQE plot
         self.eqe_plot_group = QGroupBox("Live EQE")
         self.eqe_plot_group.setLayout(QVBoxLayout())
-        self.eqe_plot_group.layout().addWidget(QLabel("EQE plot placeholder"))
+
+        self.eqe_plot_widget = EQEPlotWidget()
+
+        self.eqe_plot_group.layout().addWidget(self.eqe_plot_widget)
+
         live_layout.addWidget(self.eqe_plot_group)
 
         # Secondary plot
