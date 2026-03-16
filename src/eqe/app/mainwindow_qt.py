@@ -24,9 +24,13 @@ from PySide6.QtWidgets import (
     QLabel,
     QGroupBox,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 
 from eqe.core.measurement_config import MeasurementConfig
+from eqe.core.controller import MeasurementController
+from eqe.core.models import MeasurementParams
+from eqe.analysis.calibration import open_calibration
+from eqe.utils.validation import nm_lim_ok
 from eqe.app.widgets.session_panel import SessionPanel
 # Import GUI visibility specification
 from eqe.app.qt_models import (
@@ -49,8 +53,10 @@ from eqe.app.widgets.live_numeric_panel import LiveNumericPanel
 from eqe.app.widgets.eqe_plot_widget import EQEPlotWidget
 from eqe.app.widgets.integrated_current_plot_widget import IntegratedCurrentPlotWidget
 
-
 class MainWindow(QMainWindow):
+
+    # Signal used to forward point updates safely to the GUI thread
+    point_acquired_signal = Signal(float, float, float)
 
     def __init__(self):
         super().__init__()
@@ -65,6 +71,9 @@ class MainWindow(QMainWindow):
         # 1. Build the GUI (creates all widgets)
         # --------------------------------------------------
         self._build_ui()
+
+        # Connect worker-thread point updates to a GUI-thread slot
+        self.point_acquired_signal.connect(self._handle_point_acquired_gui)
 
         # --------------------------------------------------
         # 2. Map section identifiers to GUI widgets
@@ -103,6 +112,9 @@ class MainWindow(QMainWindow):
         self._wavelengths = []
         self._eqe_values = []
         self._current_values = []
+        
+        # measurement controller
+        self.controller = MeasurementController()
 
 
     def _on_mode_changed(self, mode):
@@ -118,37 +130,97 @@ class MainWindow(QMainWindow):
 
     def _on_start(self):
         """
-        Called when the Start button is pressed.
+        Start an EQE measurement using the current legacy controller API.
+
+        For now, the Qt GUI follows the same preparation flow as gui_legacy.py:
+        - build MeasurementParams
+        - validate wavelength limits
+        - connect instruments
+        - load calibration
+        - start controller.run_measurement_async(...)
         """
 
-        config = self.collect_measurement_config()
-        # reset measurement storage
-        self._wavelengths = []
-        self._eqe_values = []
-        self._current_values = []
+        try:
+            # --------------------------------------------------
+            # Build legacy MeasurementParams object
+            # --------------------------------------------------
+            params = MeasurementParams(
+                user=self.session_panel.get_user().strip(),
+                sample=self.metadata_panel.sample_name_edit.text().strip(),
+                wl_start=int(self.scan_panel.start_nm_spin.value()),
+                wl_stop=int(self.scan_panel.stop_nm_spin.value()),
+                interval=int(self.scan_panel.step_nm_spin.value()),
+                calibration_measurement=False,
+                show_raw=False,
+                save_raw=False,
+                stop_when_zero=False,
+                autosave=False,
+            )
 
-        self.log_panel.append("Starting measurement")
-        self.log_panel.append(str(config))
+            # Reset plots for a new measurement
+            self._reset_plots()
 
-        import numpy as np
+            self.log_panel.append("Starting measurement")
 
-        w = np.linspace(350, 850, 20)
+            # --------------------------------------------------
+            # Validate wavelength limits
+            # --------------------------------------------------
+            nm_lim = (params.wl_start, params.wl_stop)
+            nm_lim = nm_lim_ok(nm_lim, params.calibration_measurement, debug=False)
 
-        for wl in w:
+            # --------------------------------------------------
+            # Connect instruments
+            # Match the legacy GUI behavior for now
+            # --------------------------------------------------
+            self.controller.connect_instruments(
+                mono=None,
+                smu=None,
+                N=500,
+                nplc=0.01,
+                interval=0.002,
+                simulate=self.session_panel.sim_checkbox.isChecked(),
+                simulate_profile=self.session_panel.sim_profile_combo.currentText(),
+            )
 
-            eqe = 60 * np.exp(-(wl - 600)**2 / 20000)
+            # --------------------------------------------------
+            # Load calibration
+            # --------------------------------------------------
+            df_incbeamcurr, _df_ref = open_calibration(
+                nm_lim,
+                params.calibration_measurement,
+                debug=False,
+            )
 
-            current = wl / 50
+            # --------------------------------------------------
+            # Start measurement
+            # NOTE:
+            # ui_dispatch is left as None for now.
+            # Thread-safe Qt dispatch will be the next step.
+            # --------------------------------------------------
+            self.controller.run_measurement_async(
+                params=params,
+                df_incbeamcurr=df_incbeamcurr,
+                nm_lim=nm_lim,
+                ui_dispatch=None,
+                callbacks={
+                    "on_live_update": self.on_live_update,
+                    "on_status": self.on_status,
+                    "on_point_acquired": self.on_point_acquired,
+                    "on_done": self.on_measurement_done,
+                    "on_error": self.on_measurement_error,
+                    "on_finished": self.on_measurement_finished,
+                },
+            )
 
-            self.on_point_acquired(wl, eqe, current)
+        except Exception as exc:
+            self.log_panel.append(f"ERROR: {exc}")
 
 
     def _on_stop(self):
-        """
-        Placeholder stop action.
-        """
 
-        print("Stop requested")
+        self.controller.stop_measurement()
+
+        self.log_panel.append("Stop requested")
 
 
     def _on_save(self):
@@ -197,39 +269,141 @@ class MainWindow(QMainWindow):
         return config
 
 
-    def on_live_update(self, eqe, cell_current, ref_current):
+    def on_live_update(self, *args, **kwargs):
         """
-        Live update during a measurement (high frequency).
+        Live update during a measurement.
 
-        Updates the numeric readout panel.
+        The current legacy backend sends a human-readable status string
+        instead of structured numeric values. For now:
+
+        - strings are appended to the log
+        - numeric triples update the live numeric panel
         """
 
-        self.live_numeric_panel.update_values(
-            eqe,
-            cell_current,
-            ref_current
+        # Case 1:
+        # Legacy backend sends a single status string
+        if len(args) == 1 and isinstance(args[0], str):
+            self.log_panel.append(args[0].replace("IPCE", "EQE"))
+            return
+
+        # Case 2:
+        # Backend provides exactly:
+        #   eqe, cell_current, ref_current
+        if len(args) == 3:
+            eqe, cell_current, ref_current = args
+
+            self.live_numeric_panel.update_values(
+                eqe,
+                cell_current,
+                ref_current,
+            )
+            return
+
+        # Case 3:
+        # Backend provides only EQE as a number
+        if len(args) == 1 and isinstance(args[0], (int, float)):
+            eqe = float(args[0])
+
+            self.live_numeric_panel.update_values(
+                eqe,
+                0.0,
+                0.0,
+            )
+            return
+
+        # Fallback:
+        # keep unexpected payloads visible for debugging
+        self.log_panel.append(f"Unhandled live_update payload: args={args}, kwargs={kwargs}")
+
+
+    def on_point_acquired(self, *args, **kwargs):
+        """
+        Called when a wavelength point is finished.
+
+        The legacy backend sends keyword arguments such as:
+        - nm
+        - IPCE
+        - int_curr
+
+        This method adapts that payload for the Qt plot widgets.
+        """
+
+        # ----------------------------------------
+        # Case 1: legacy keyword payload
+        # ----------------------------------------
+        if kwargs:
+            wavelength = kwargs.get("nm", kwargs.get("wavelength"))
+            eqe = kwargs.get("IPCE", kwargs.get("ipce", kwargs.get("eqe")))
+            integrated_current = kwargs.get(
+                "int_curr",
+                kwargs.get("integrated_current", kwargs.get("jsc", 0.0))
+            )
+
+        # ----------------------------------------
+        # Case 2: positional payload
+        # ----------------------------------------
+        elif len(args) == 3:
+            wavelength, eqe, integrated_current = args
+
+        else:
+            self.log_panel.append(
+                f"Unhandled point_acquired payload: args={args}, kwargs={kwargs}"
+            )
+            return
+
+        # Guard against missing values
+        if wavelength is None or eqe is None:
+            self.log_panel.append(
+                f"Incomplete point_acquired payload: args={args}, kwargs={kwargs}"
+            )
+            return
+
+        # Forward the update safely to the GUI thread
+        self.point_acquired_signal.emit(
+            float(wavelength),
+            float(eqe),
+            float(integrated_current),
         )
 
 
-    def on_point_acquired(self, wavelength, eqe, integrated_current):
+    def _handle_point_acquired_gui(self, wavelength, eqe, integrated_current):
         """
-        Called when a wavelength point is finished.
+        Handle point updates in the GUI thread.
+
+        This method is connected to a Qt signal so that the plot widgets
+        are updated safely from the main thread.
         """
 
-        self._wavelengths.append(wavelength)
-        self._eqe_values.append(eqe)
-        self._current_values.append(integrated_current)
+        # Store data for plotting
+        self._wavelengths.append(float(wavelength))
+        self._eqe_values.append(float(eqe))
+        self._current_values.append(float(integrated_current))
 
-        # update plots
+        # Update plots
         self.eqe_plot_widget.update_curve(
             self._wavelengths,
-            self._eqe_values
+            self._eqe_values,
         )
 
         self.current_plot_widget.update_curve(
             self._wavelengths,
-            self._current_values
+            self._current_values,
         )
+
+
+    def _reset_plots(self):
+        """
+        Clear stored data and reset plot widgets before starting
+        a new measurement.
+        """
+
+        self._wavelengths = []
+        self._eqe_values = []
+        self._current_values = []
+
+        # reset plots
+        self.eqe_plot_widget.update_curve([], [])
+        self.current_plot_widget.update_curve([], [])
 
 
     def on_status(self, message):
@@ -238,6 +412,31 @@ class MainWindow(QMainWindow):
         """
 
         self.log_panel.append(message)
+
+
+    def on_measurement_done(self, df_result):
+        """
+        Called when the measurement finishes successfully.
+        """
+
+        self.log_panel.append("Measurement done")
+
+
+    def on_measurement_error(self, exc):
+        """
+        Called when the measurement worker raises an exception.
+        """
+
+        self.log_panel.append(f"ERROR: {exc}")
+
+
+    def on_measurement_finished(self):
+        """
+        Called when the measurement worker finishes, whether successfully
+        or after an error.
+        """
+
+        self.log_panel.append("Measurement finished")
 
 
     def update_mode_visibility(self, mode):

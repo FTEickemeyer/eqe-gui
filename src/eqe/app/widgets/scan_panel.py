@@ -47,9 +47,9 @@ class ScanPanel(QWidget):
 
         self.start_nm_spin = QDoubleSpinBox()
 
-        self.start_nm_spin.setRange(200, 2000)
+        self.start_nm_spin.setRange(350, 1200)
         self.start_nm_spin.setDecimals(1)
-        self.start_nm_spin.setValue(300)
+        self.start_nm_spin.setValue(400)
 
         self.start_nm_spin.setSuffix(" nm")
 
@@ -61,7 +61,7 @@ class ScanPanel(QWidget):
 
         self.stop_nm_spin = QDoubleSpinBox()
 
-        self.stop_nm_spin.setRange(200, 2000)
+        self.stop_nm_spin.setRange(350, 1200)
         self.stop_nm_spin.setDecimals(1)
         self.stop_nm_spin.setValue(850)
 
