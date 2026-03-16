@@ -39,8 +39,9 @@ from eqe.app.qt_models import (
     SECTION_ADVANCED,
     SECTION_LIVE_NUMERIC,
 )
-from eqe.app.widgets.metadata_panel import MetadataPanel
 from eqe.app.widgets.session_panel import SessionPanel
+from eqe.app.widgets.metadata_panel import MetadataPanel
+from eqe.app.widgets.scan_panel import ScanPanel
 
 
 class MainWindow(QMainWindow):
@@ -196,10 +197,14 @@ class MainWindow(QMainWindow):
 
         setup_layout.addWidget(self.metadata_group)
 
-        # Scan settings
+        # Spectral scan section
         self.scan_group = QGroupBox("Spectral Scan")
         self.scan_group.setLayout(QVBoxLayout())
-        self.scan_group.layout().addWidget(QLabel("Scan settings placeholder"))
+
+        # Create and insert the real scan panel
+        self.scan_panel = ScanPanel()
+        self.scan_group.layout().addWidget(self.scan_panel)
+
         setup_layout.addWidget(self.scan_group)
 
         # Electrical bias
