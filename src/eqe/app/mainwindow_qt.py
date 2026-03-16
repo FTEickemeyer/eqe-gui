@@ -320,18 +320,26 @@ class MainWindow(QMainWindow):
         """
         Called when a wavelength point is finished.
 
-        The legacy backend sends keyword arguments such as:
-        - nm
-        - IPCE
-        - int_curr
+        Preferred payload from the measurement engine:
+        - wavelength
+        - eqe
+        - integrated_current
 
-        This method adapts that payload for the Qt plot widgets.
+        A fallback for legacy keys is kept temporarily.
         """
 
         # ----------------------------------------
-        # Case 1: legacy keyword payload
+        # Case 1: new clean keyword payload
         # ----------------------------------------
-        if kwargs:
+        if kwargs and "wavelength" in kwargs and "eqe" in kwargs:
+            wavelength = kwargs["wavelength"]
+            eqe = kwargs["eqe"]
+            integrated_current = kwargs.get("integrated_current", 0.0)
+
+        # ----------------------------------------
+        # Case 2: temporary legacy fallback
+        # ----------------------------------------
+        elif kwargs:
             wavelength = kwargs.get("nm", kwargs.get("wavelength"))
             eqe = kwargs.get("IPCE", kwargs.get("ipce", kwargs.get("eqe")))
             integrated_current = kwargs.get(
@@ -340,7 +348,7 @@ class MainWindow(QMainWindow):
             )
 
         # ----------------------------------------
-        # Case 2: positional payload
+        # Case 3: positional payload
         # ----------------------------------------
         elif len(args) == 3:
             wavelength, eqe, integrated_current = args

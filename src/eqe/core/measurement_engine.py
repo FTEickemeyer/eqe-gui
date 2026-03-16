@@ -163,8 +163,21 @@ def perform_measurement(
             if should_stop():
                 emit_status("Measurement stopped.")
                 break
+
             if on_point_acquired is not None:
                 on_point_acquired(
+                    # ----------------------------------------
+                    # New clean keys for the new Qt GUI
+                    # ----------------------------------------
+                    wavelength=float(nm),
+                    eqe=float(IPCE) if IPCE is not None else None,
+                    integrated_current=float(int_curr) if int_curr is not None else 0.0,
+                    cell_current=float(cell_current) if cell_current is not None else 0.0,
+                    ref_current=float(intSiref_current) if intSiref_current is not None else 0.0,
+
+                    # ----------------------------------------
+                    # Legacy keys kept for backward compatibility
+                    # ----------------------------------------
                     nm=nm,
                     measured_wavelengths=list(measured_wavelengths),
                     signal_A_arr=list(signal_A_arr),
@@ -172,13 +185,14 @@ def perform_measurement(
                     IPCE_arr=list(IPCE_arr),
                     int_curr_arr=list(int_curr_arr),
                     intSiref_current=intSiref_current,
-                    cell_current=cell_current,
+                    cell_current_legacy=cell_current,
                     IPCE=IPCE,
                     int_curr=int_curr,
                     show_IPCE=show_IPCE,
                     show_raw_signal=show_raw_signal,
                     nm_lim=nm_lim,
                 )
+                
 
             if stop_when_zero and cell_current is not None and abs(cell_current) < 1e-7:
                 emit_status("Measurement stopped because signal reached zero threshold.")
