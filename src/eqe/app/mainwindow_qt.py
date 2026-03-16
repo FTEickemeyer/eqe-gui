@@ -45,6 +45,7 @@ from eqe.app.widgets.metadata_panel import MetadataPanel
 from eqe.app.widgets.scan_panel import ScanPanel
 from eqe.app.widgets.log_panel import LogPanel
 from eqe.app.widgets.bias_panel import BiasPanel
+from eqe.app.widgets.live_numeric_panel import LiveNumericPanel
 
 
 class MainWindow(QMainWindow):
@@ -313,10 +314,14 @@ class MainWindow(QMainWindow):
         self.secondary_plot_group.layout().addWidget(QLabel("Secondary plot placeholder"))
         live_layout.addWidget(self.secondary_plot_group)
 
-        # Numeric readout
+        # Live numeric readout
         self.readout_group = QGroupBox("Live Readout")
         self.readout_group.setLayout(QVBoxLayout())
-        self.readout_group.layout().addWidget(QLabel("Numeric readout placeholder"))
+
+        self.live_numeric_panel = LiveNumericPanel()
+
+        self.readout_group.layout().addWidget(self.live_numeric_panel)
+
         live_layout.addWidget(self.readout_group)
 
         # Status / log
