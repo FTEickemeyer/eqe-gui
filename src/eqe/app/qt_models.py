@@ -42,7 +42,7 @@ MODE_SECTIONS = {
         SECTION_BACKGROUND: False,
         SECTION_CALIBRATION: True,
         SECTION_ADVANCED: True,
-        SECTION_LIVE_NUMERIC: False,
+        SECTION_LIVE_NUMERIC: True,
     },
 
     BIASED_EQE: {
@@ -53,7 +53,7 @@ MODE_SECTIONS = {
         SECTION_BACKGROUND: False,
         SECTION_CALIBRATION: True,
         SECTION_ADVANCED: True,
-        SECTION_LIVE_NUMERIC: False,
+        SECTION_LIVE_NUMERIC: True,
     },
 
     STANDARD_LIVE_EQE: {

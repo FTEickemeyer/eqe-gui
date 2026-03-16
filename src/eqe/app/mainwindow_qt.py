@@ -58,6 +58,9 @@ class MainWindow(QMainWindow):
     # Signal used to forward point updates safely to the GUI thread
     point_acquired_signal = Signal(float, float, float)
 
+    # Signal used to update the live numeric panel safely in the GUI thread
+    live_numeric_signal = Signal(float, float, float)
+
     def __init__(self):
         super().__init__()
 
@@ -74,6 +77,7 @@ class MainWindow(QMainWindow):
 
         # Connect worker-thread point updates to a GUI-thread slot
         self.point_acquired_signal.connect(self._handle_point_acquired_gui)
+        self.live_numeric_signal.connect(self._handle_live_numeric_gui)
 
         # --------------------------------------------------
         # 2. Map section identifiers to GUI widgets
@@ -366,7 +370,17 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # Forward the update safely to the GUI thread
+        # Forward numeric update safely to the GUI thread
+        cell_current = kwargs.get("cell_current", 0.0) if kwargs else 0.0
+        ref_current = kwargs.get("ref_current", 0.0) if kwargs else 0.0
+
+        self.live_numeric_signal.emit(
+            float(eqe),
+            float(cell_current),
+            float(ref_current),
+        )
+
+        # Forward the plot update safely to the GUI thread
         self.point_acquired_signal.emit(
             float(wavelength),
             float(eqe),
@@ -396,6 +410,18 @@ class MainWindow(QMainWindow):
         self.current_plot_widget.update_curve(
             self._wavelengths,
             self._current_values,
+        )
+
+
+    def _handle_live_numeric_gui(self, eqe, cell_current, ref_current):
+        """
+        Update the live numeric panel in the GUI thread.
+        """
+
+        self.live_numeric_panel.update_values(
+            float(eqe),
+            float(cell_current),
+            float(ref_current),
         )
 
 
