@@ -44,7 +44,7 @@ from eqe.app.widgets.session_panel import SessionPanel
 from eqe.app.widgets.metadata_panel import MetadataPanel
 from eqe.app.widgets.scan_panel import ScanPanel
 from eqe.app.widgets.log_panel import LogPanel
-
+from eqe.app.widgets.bias_panel import BiasPanel
 
 
 class MainWindow(QMainWindow):
@@ -131,7 +131,8 @@ class MainWindow(QMainWindow):
 
         metadata = self.metadata_panel.get_values()
         scan = self.scan_panel.get_values()
-
+        bias = self.bias_panel.get_values()
+        
         config = MeasurementConfig(
 
             # Metadata
@@ -152,6 +153,10 @@ class MainWindow(QMainWindow):
             # Simulation
             simulation=self.session_panel.sim_checkbox.isChecked(),
             simulation_profile=self.session_panel.sim_profile_combo.currentText(),
+
+            # Electrical bias
+            bias_enabled=bias["bias_enabled"],
+            bias_voltage=bias["bias_voltage"],
         )
 
         return config
@@ -252,7 +257,11 @@ class MainWindow(QMainWindow):
         # Electrical bias
         self.bias_group = QGroupBox("Electrical Bias")
         self.bias_group.setLayout(QVBoxLayout())
-        self.bias_group.layout().addWidget(QLabel("Bias controls placeholder"))
+
+        self.bias_panel = BiasPanel()
+
+        self.bias_group.layout().addWidget(self.bias_panel)
+
         setup_layout.addWidget(self.bias_group)
 
         # Optical modulation

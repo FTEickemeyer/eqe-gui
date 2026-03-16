@@ -46,3 +46,10 @@ class MeasurementConfig:
 
     simulation: bool
     simulation_profile: str
+
+    # -----------------------------
+    # Electrical bias
+    # -----------------------------
+
+    bias_enabled: bool
+    bias_voltage: float
