@@ -13,10 +13,7 @@ Main area:
     Left  -> Measurement setup
     Right -> Live monitoring
 
-Later we will insert real widgets into the placeholder group boxes.
 """
-
-from eqe.app.widgets.session_panel import SessionPanel
 
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -29,6 +26,22 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from eqe.app.widgets.session_panel import SessionPanel
+# Import GUI visibility specification
+from eqe.app.qt_models import (
+    MODE_SECTIONS,
+    SECTION_METADATA,
+    SECTION_SCAN,
+    SECTION_BIAS,
+    SECTION_MODULATION,
+    SECTION_BACKGROUND,
+    SECTION_CALIBRATION,
+    SECTION_ADVANCED,
+    SECTION_LIVE_NUMERIC,
+)
+from eqe.app.widgets.metadata_panel import MetadataPanel
+from eqe.app.widgets.session_panel import SessionPanel
+
 
 class MainWindow(QMainWindow):
 
@@ -36,13 +49,35 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         # Window title
-        self.setWindowTitle("EQE / IPCE Measurement GUI (PySide6)")
+        self.setWindowTitle("EQE Measurement GUI (PySide6)")
 
         # Initial window size
         self.resize(1400, 900)
 
-        # Build the GUI
+        # --------------------------------------------------
+        # 1. Build the GUI (creates all widgets)
+        # --------------------------------------------------
         self._build_ui()
+
+        # --------------------------------------------------
+        # 2. Map section identifiers to GUI widgets
+        # --------------------------------------------------
+        self.section_widgets = {
+            SECTION_METADATA: self.metadata_group,
+            SECTION_SCAN: self.scan_group,
+            SECTION_BIAS: self.bias_group,
+            SECTION_MODULATION: self.modulation_group,
+            SECTION_BACKGROUND: self.background_group,
+            SECTION_CALIBRATION: self.calibration_group,
+            SECTION_ADVANCED: self.advanced_group,
+            SECTION_LIVE_NUMERIC: self.readout_group,
+        }
+
+        # --------------------------------------------------
+        # 3. Apply visibility for the initial mode
+        # --------------------------------------------------
+        initial_mode = self.session_panel.get_mode()
+        self.update_mode_visibility(initial_mode)
 
 
     def _on_mode_changed(self, mode):
@@ -51,6 +86,9 @@ class MainWindow(QMainWindow):
         """
 
         print(f"Mode changed to: {mode}")
+
+        # Update panel visibility
+        self.update_mode_visibility(mode)   
 
 
     def _on_start(self):
@@ -75,6 +113,24 @@ class MainWindow(QMainWindow):
         """
 
         print("Manual save requested")
+
+    def update_mode_visibility(self, mode):
+        """
+        Update GUI panel visibility according to the selected measurement mode.
+
+        The rules are defined in MODE_SECTIONS (qt_models.py).
+        """
+
+        # Get visibility rules for the selected mode
+        sections = MODE_SECTIONS.get(mode, {})
+
+        for section, widget in self.section_widgets.items():
+
+            # Determine whether this section should be visible
+            visible = sections.get(section, False)
+
+            # Show or hide the widget
+            widget.setVisible(visible)
 
 
     def _build_ui(self):
@@ -133,7 +189,11 @@ class MainWindow(QMainWindow):
         # Metadata section
         self.metadata_group = QGroupBox("Sample / Metadata")
         self.metadata_group.setLayout(QVBoxLayout())
-        self.metadata_group.layout().addWidget(QLabel("Metadata panel placeholder"))
+
+        # Create and insert the real metadata panel
+        self.metadata_panel = MetadataPanel()
+        self.metadata_group.layout().addWidget(self.metadata_panel)
+
         setup_layout.addWidget(self.metadata_group)
 
         # Scan settings
