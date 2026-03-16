@@ -14,3 +14,6 @@ data_dir in paths.py
 
 search with everything:
 nocase:C:\Users\labo\Documents\code\eqe-gui\src\eqe\ content:data_dir 
+
+feature branch: feature/pyside6-gui
+pip install PySide6
