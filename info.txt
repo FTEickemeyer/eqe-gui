@@ -2,6 +2,7 @@ cd /d C:\Users\labo\Documents\code\eqe-gui
 .venv\Scripts\activate
 
 python -m eqe
+python -m eqe.app.gui_qt
 
 git add .
 git commit -m "text"
@@ -17,3 +18,4 @@ nocase:C:\Users\labo\Documents\code\eqe-gui\src\eqe\ content:data_dir
 
 feature branch: feature/pyside6-gui
 pip install PySide6
+

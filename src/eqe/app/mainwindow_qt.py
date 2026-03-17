@@ -275,48 +275,19 @@ class MainWindow(QMainWindow):
 
     def on_live_update(self, *args, **kwargs):
         """
-        Live update during a measurement.
+        Handle live status updates from the legacy backend.
 
-        The current legacy backend sends a human-readable status string
-        instead of structured numeric values. For now:
-
-        - strings are appended to the log
-        - numeric triples update the live numeric panel
+        At this stage, measurement values are updated through
+        `on_point_acquired`, so this callback is used only for
+        human-readable status messages.
         """
 
-        # Case 1:
-        # Legacy backend sends a single status string
+        # Legacy backend currently sends a single status string
         if len(args) == 1 and isinstance(args[0], str):
             self.log_panel.append(args[0].replace("IPCE", "EQE"))
             return
 
-        # Case 2:
-        # Backend provides exactly:
-        #   eqe, cell_current, ref_current
-        if len(args) == 3:
-            eqe, cell_current, ref_current = args
-
-            self.live_numeric_panel.update_values(
-                eqe,
-                cell_current,
-                ref_current,
-            )
-            return
-
-        # Case 3:
-        # Backend provides only EQE as a number
-        if len(args) == 1 and isinstance(args[0], (int, float)):
-            eqe = float(args[0])
-
-            self.live_numeric_panel.update_values(
-                eqe,
-                0.0,
-                0.0,
-            )
-            return
-
-        # Fallback:
-        # keep unexpected payloads visible for debugging
+        # Fallback for unexpected payloads
         self.log_panel.append(f"Unhandled live_update payload: args={args}, kwargs={kwargs}")
 
 
