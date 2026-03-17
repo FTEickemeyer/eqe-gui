@@ -275,16 +275,25 @@ class MainWindow(QMainWindow):
 
     def on_live_update(self, *args, **kwargs):
         """
-        Handle live status updates from the legacy backend.
+        Handle live status updates from the backend.
 
-        At this stage, measurement values are updated through
-        `on_point_acquired`, so this callback is used only for
-        human-readable status messages.
+        Repetitive per-point measurement messages are no longer shown in the log,
+        because the plots and live numeric panel already display that information.
+
+        The log is reserved for higher-level status messages.
         """
 
         # Legacy backend currently sends a single status string
         if len(args) == 1 and isinstance(args[0], str):
-            self.log_panel.append(args[0].replace("IPCE", "EQE"))
+            message = args[0].replace("IPCE", "EQE")
+
+            # Skip repetitive per-point measurement messages
+            if message.startswith("Wavelength = "):
+                return
+            if message.startswith("Integrated current = "):
+                return
+
+            self.log_panel.append(message)
             return
 
         # Fallback for unexpected payloads
