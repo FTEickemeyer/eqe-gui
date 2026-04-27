@@ -1,5 +1,4 @@
-from eqe.app import gui_legacy
+from eqe.app.gui_qt import main
 
 if __name__ == "__main__":
-    # The legacy GUI runs on import, so we just import it.
-    pass
+    main()
