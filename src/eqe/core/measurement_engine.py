@@ -81,7 +81,6 @@ def perform_measurement(
     if bias_enabled:
         try:
             smu.set_bias_voltage(bias_voltage)
-            smu.enable_output()
             emit_status(f"SMU bias applied: {bias_voltage:.3f} V")
         except Exception as e:
             emit_status(f"WARNING: Failed to apply bias: {e}")
@@ -226,7 +225,6 @@ def perform_measurement(
     # ----------------------------------------
     try:
         smu.set_bias_voltage(0.0)
-        smu.disable_output()
         emit_status("SMU bias reset to 0 V")
     except Exception:
         pass

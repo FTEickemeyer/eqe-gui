@@ -31,11 +31,12 @@ class SMU:
         self.chB_dark = None
         self.chA = None
         self.chB = None
+        self.bias_voltage = 0.0
 
     def upload_script(self):
         tsp_function = '''
         loadscript "dual_current_triggered"
-        function dual_current_triggered(N, nplc, interval)
+        function dual_current_triggered(N, nplc, interval, biasV)
             smua.reset()
             smub.reset()
             display.smua.measure.func = display.MEASURE_DCAMPS
@@ -48,7 +49,7 @@ class SMU:
             smua.source.output = smua.OUTPUT_ON
 
             smub.source.func = smub.OUTPUT_DCVOLTS
-            smub.source.levelv = 0
+            smub.source.levelv = biasV
             smub.measure.autorangei = smua.AUTORANGE_OFF
             smub.measure.rangei = 1e-3
             smub.source.output = smub.OUTPUT_ON
@@ -101,7 +102,9 @@ class SMU:
     def run_dual_measurement(self):
         self.inst.write("abort")
         self.inst.write("errorqueue.clear()")
-        self.inst.write(f"dual_current_triggered({self.N}, {self.nplc}, {self.interval})")
+        self.inst.write(
+            f"dual_current_triggered({self.N}, {self.nplc}, {self.interval}, {self.bias_voltage})"
+        )
 
         lines = []
         while True:
@@ -154,8 +157,8 @@ class SMU:
         """
         Set DC bias voltage on channel B (test cell).
         """
-        self.inst.write(f"smub.source.levelv = {V}")
-
+        self.bias_voltage = V
+    
     def enable_output(self):
         """
         Enable SMU outputs.
