@@ -67,8 +67,10 @@ class SMU:
             smub.measure.interval = interval
 
             format.data = format.ASCII
+
             smua.nvbuffer1.clear()
             smub.nvbuffer1.clear()
+
             smua.nvbuffer1.appendmode = 1
             smub.nvbuffer1.appendmode = 1
 
@@ -152,6 +154,12 @@ class SMU:
         self.t = t
         self.i_chA = np.asarray(i_chA)
         self.i_chB = np.asarray(i_chB)
+        self.compliance_hit = False
+        if self.compliance_current is not None and self.compliance_current > 0:
+            if len(self.i_chB) > 0:
+                max_abs_current = np.max(np.abs(self.i_chB))
+                if max_abs_current >= 0.95 * abs(self.compliance_current):
+                    self.compliance_hit = True
         self.duration = duration
 
     def set_bias_voltage(self, V):

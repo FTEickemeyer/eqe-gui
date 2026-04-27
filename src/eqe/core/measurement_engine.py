@@ -124,6 +124,8 @@ def perform_measurement(
                 break
 
             smu.chA, smu.chB = smu.get_average()
+            if getattr(smu, "compliance_hit", False):
+                emit_status(f"WARNING: Compliance limit reached at {nm} nm")
 
             intSiref_current = smu.chA - smu.chA_dark
             cell_current = smu.chB - smu.chB_dark
