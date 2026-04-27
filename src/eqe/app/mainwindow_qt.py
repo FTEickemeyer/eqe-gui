@@ -15,6 +15,9 @@ Main area:
 
 """
 
+from pathlib import Path
+from datetime import datetime
+
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -52,6 +55,9 @@ from eqe.app.widgets.bias_panel import BiasPanel
 from eqe.app.widgets.live_numeric_panel import LiveNumericPanel
 from eqe.app.widgets.eqe_plot_widget import EQEPlotWidget
 from eqe.app.widgets.integrated_current_plot_widget import IntegratedCurrentPlotWidget
+from eqe.io.data_io import save_data
+from eqe.io.paths import get_paths
+
 
 class MainWindow(QMainWindow):
 
@@ -116,6 +122,9 @@ class MainWindow(QMainWindow):
         self._wavelengths = []
         self._eqe_values = []
         self._current_values = []
+
+        # Last completed measurement dataframe, used by manual Save
+        self._last_result_df = None
         
         # measurement controller
         self.controller = MeasurementController()
@@ -229,10 +238,46 @@ class MainWindow(QMainWindow):
 
     def _on_save(self):
         """
-        Placeholder save action.
+        Save the last completed measurement manually.
         """
 
-        print("Manual save requested")
+        # Manual save only makes sense after a successful measurement
+        if self._last_result_df is None:
+            self.log_panel.append("No completed measurement available to save.")
+            return
+
+        try:
+            # Use current GUI values for naming
+            sample_name = self.metadata_panel.sample_name_edit.text().strip() or "sample"
+            user_name = self.session_panel.get_user().strip() or "user"
+
+            # Build the target directory:
+            # <measurements_dir>/<user_name>
+            measurements_dir = Path(get_paths()["measurements_dir"])
+
+            # Create date-based folder: YYMMDD_EQE
+            date_str = datetime.now().strftime("%y%m%d")
+            session_dir = measurements_dir / user_name / f"{date_str}_EQE"
+            session_dir.mkdir(parents=True, exist_ok=True)
+
+            # For now:
+            # - normal EQE measurement
+            # - no raw save
+            # - no reference dataframe needed
+            fp = save_data(
+                df=self._last_result_df,
+                df_ref=None,
+                sample_name=sample_name,
+                user_dir=session_dir,
+                calibration_measurement=False,
+                save_raw_data=False,
+                fig=self.eqe_plot_widget.figure,
+            )
+
+            self.log_panel.append(f"Saved: {fp}")
+
+        except Exception as exc:
+            self.log_panel.append(f"Save failed: {exc}")
 
 
     def collect_measurement_config(self):
@@ -432,6 +477,9 @@ class MainWindow(QMainWindow):
         """
         Called when the measurement finishes successfully.
         """
+
+        # Store the completed dataframe for later manual save
+        self._last_result_df = df_result
 
         self.log_panel.append("Measurement done")
 
