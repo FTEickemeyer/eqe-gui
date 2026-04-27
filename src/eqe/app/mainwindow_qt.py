@@ -55,8 +55,10 @@ from eqe.app.widgets.bias_panel import BiasPanel
 from eqe.app.widgets.live_numeric_panel import LiveNumericPanel
 from eqe.app.widgets.eqe_plot_widget import EQEPlotWidget
 from eqe.app.widgets.integrated_current_plot_widget import IntegratedCurrentPlotWidget
+from eqe.app.qt_models import STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE
 from eqe.io.data_io import save_data
 from eqe.io.paths import get_paths
+
 
 
 class MainWindow(QMainWindow):
@@ -138,7 +140,10 @@ class MainWindow(QMainWindow):
         print(f"Mode changed to: {mode}")
 
         # Update panel visibility
-        self.update_mode_visibility(mode)   
+        self.update_mode_visibility(mode)
+
+        # Update plot labels for scan/live modes
+        self._configure_plots_for_mode(mode)
 
 
     def _on_start(self):
@@ -174,6 +179,8 @@ class MainWindow(QMainWindow):
             )
 
             params.mode = self.session_panel.get_mode()
+            self._active_mode = params.mode
+            self._configure_plots_for_mode(self._active_mode)
 
             # Reset plots for a new measurement
             self._reset_plots()
@@ -409,6 +416,8 @@ class MainWindow(QMainWindow):
         # Forward numeric update safely to the GUI thread
         cell_current = kwargs.get("cell_current", 0.0) if kwargs else 0.0
         ref_current = kwargs.get("ref_current", 0.0) if kwargs else 0.0
+        time_s = kwargs.get("time_s", None) if kwargs else None
+        fixed_wavelength_nm = kwargs.get("fixed_wavelength_nm", None) if kwargs else None
 
         self.live_numeric_signal.emit(
             float(eqe),
@@ -417,10 +426,18 @@ class MainWindow(QMainWindow):
         )
 
         # Forward the plot update safely to the GUI thread
+
+        if getattr(self, "_active_mode", None) in (STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE):
+            x_value = float(time_s)
+            y2_value = float(cell_current)
+        else:
+            x_value = float(wavelength)
+            y2_value = float(integrated_current)
+
         self.point_acquired_signal.emit(
-            float(wavelength),
+            x_value,
             float(eqe),
-            float(integrated_current),
+            y2_value,
         )
 
 
@@ -698,3 +715,30 @@ class MainWindow(QMainWindow):
 
         splitter.setSizes([400, 1000])
 
+    def _configure_plots_for_mode(self, mode):
+        """
+        Configure plot labels according to the selected measurement mode.
+        """
+
+        from eqe.app.qt_models import STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE
+
+        if mode in (STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE):
+            self.eqe_plot_widget.ax.set_xlabel("Time (s)")
+            self.eqe_plot_widget.ax.set_ylabel("EQE (%)")
+            self.eqe_plot_widget.ax.set_title("Live EQE vs Time")
+
+            self.current_plot_widget.ax.set_xlabel("Time (s)")
+            self.current_plot_widget.ax.set_ylabel("Cell current (A)")
+            self.current_plot_widget.ax.set_title("Live Cell Current vs Time")
+
+        else:
+            self.eqe_plot_widget.ax.set_xlabel("Wavelength (nm)")
+            self.eqe_plot_widget.ax.set_ylabel("EQE (%)")
+            self.eqe_plot_widget.ax.set_title("EQE Spectrum")
+
+            self.current_plot_widget.ax.set_xlabel("Wavelength (nm)")
+            self.current_plot_widget.ax.set_ylabel("Integrated current (mA/cm²)")
+            self.current_plot_widget.ax.set_title("Integrated Current")
+
+        self.eqe_plot_widget.canvas.draw_idle()
+        self.current_plot_widget.canvas.draw_idle()
