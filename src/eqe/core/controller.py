@@ -28,7 +28,7 @@ class MeasurementController:
         interval=None,
         simulate=False,
         simulate_profile="good_cell",
-    ):
+        ):
         # --------------------------------------------------
         # Reuse already connected instruments
         # --------------------------------------------------
@@ -53,6 +53,16 @@ class MeasurementController:
 
     def request_stop(self):
         self._stop_event.set()
+
+    def stop_measurement(self):
+        """
+        Request the currently running measurement to stop.
+
+        This method is called by the GUI stop button.
+        The measurement loop checks this flag between wavelength steps
+        and during interruptible sleeps.
+        """
+        self.request_stop()
 
     def stop_requested(self):
         return self._stop_event.is_set()
