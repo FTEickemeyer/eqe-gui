@@ -173,6 +173,8 @@ class MainWindow(QMainWindow):
                 autosave=False,
             )
 
+            params.mode = self.session_panel.get_mode()
+
             # Reset plots for a new measurement
             self._reset_plots()
 

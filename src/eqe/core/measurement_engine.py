@@ -257,3 +257,125 @@ def perform_measurement(
 
     df.set_index("Wavelength (nm)", inplace=True)
     return df
+
+
+def perform_live_monitoring(
+    mono,
+    smu,
+    df_incbeamcurr,
+    wavelength_nm,
+    bias_enabled=False,
+    bias_voltage=0.0,
+    compliance_current=1e-3,
+    on_live_update=None,
+    on_status=None,
+    stop_requested=None,
+    on_point_acquired=None,
+):
+    """
+    GUI-agnostic live monitoring loop at one fixed wavelength.
+
+    Reuses smu.run_dual_measurement().
+    Does not modify the SMU layer.
+    """
+
+    def emit_live_update(message):
+        if on_live_update is not None:
+            on_live_update(message)
+        else:
+            print(message)
+
+    def emit_status(message):
+        if on_status is not None:
+            on_status(message)
+        elif message:
+            print(message)
+
+    def should_stop():
+        if stop_requested is not None:
+            try:
+                return bool(stop_requested())
+            except Exception:
+                return False
+        return False
+
+    nm = float(wavelength_nm)
+
+    emit_status(f"Live monitoring at {nm:.0f} nm")
+
+    if bias_enabled:
+        emit_status(f"Bias enabled: {bias_voltage:.3f} V")
+        try:
+            smu.set_bias_voltage(bias_voltage)
+            smu.set_compliance_current(compliance_current)
+            emit_status(f"SMU bias applied: {bias_voltage:.3f} V")
+            emit_status(f"Compliance current: {compliance_current:.3e} A")
+        except Exception as e:
+            emit_status(f"WARNING: Failed to apply bias: {e}")
+    else:
+        emit_status("Bias disabled")
+
+    # Move monochromator once
+    mono.shutter(True)
+    mono.goto_nm(nm, on_status=emit_status)
+    mono.shutter(False)
+
+    # Same calibration logic as scan mode
+    try:
+        incbeamcurr_div_intSirefcurrent = df_incbeamcurr[
+            "incident beam current (A)/intSiref current (A)"
+        ].loc[nm]
+    except KeyError:
+        raise KeyError(
+            f"No calibration value found at {nm:.0f} nm. "
+            "Use a wavelength present in the calibration table."
+        )
+
+    t0 = time.time()
+
+    while not should_stop():
+
+        smu.run_dual_measurement()
+        smu.chA, smu.chB = smu.get_average()
+
+        if getattr(smu, "compliance_hit", False):
+            emit_status(f"WARNING: Compliance limit reached at {nm:.0f} nm")
+
+        intSiref_current = smu.chA - smu.chA_dark
+        cell_current = smu.chB - smu.chB_dark
+
+        IPCE = cell_current / (
+            incbeamcurr_div_intSirefcurrent * intSiref_current
+        )
+
+        if IPCE < 0.0:
+            IPCE = 0.0
+
+        elapsed_s = time.time() - t0
+
+        emit_live_update(
+            f"Live EQE at {nm:.0f} nm = {IPCE:.2f} %"
+        )
+
+        if on_point_acquired is not None:
+            on_point_acquired(
+                wavelength=elapsed_s,          # x-axis is now time
+                eqe=float(IPCE),
+                integrated_current=0.0,
+                cell_current=float(cell_current),
+                ref_current=float(intSiref_current),
+
+                # explicit live-mode keys
+                time_s=float(elapsed_s),
+                fixed_wavelength_nm=float(nm),
+            )
+
+    try:
+        smu.set_bias_voltage(0.0)
+        emit_status("SMU bias reset to 0 V")
+    except Exception:
+        pass
+
+    emit_status("Live monitoring stopped")
+
+    return pd.DataFrame()

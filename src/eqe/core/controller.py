@@ -2,8 +2,11 @@ import threading
 
 from eqe.config.load_config import load_config
 from eqe.core.instruments.factory import initialize_system
-from eqe.core.measurement_engine import perform_measurement
-
+from eqe.core.measurement_engine import (
+    perform_measurement,
+    perform_live_monitoring,
+)
+from eqe.app.qt_models import STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE
 
 class MeasurementController:
     def __init__(self):
@@ -98,31 +101,58 @@ class MeasurementController:
 
         def worker():
             try:
-                df_ipce = perform_measurement(
-                    self.mono,
-                    self.smu,
-                    df_incbeamcurr,
-                    params.calibration_measurement,
-                    nm_lim,
-                    delta_nm=params.interval,
-                    show_raw_signal=params.show_raw,
-                    stop_when_zero=params.stop_when_zero,
+                if getattr(params, "mode", None) in (STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE):
+                    wavelength_nm = params.wl_start
 
-                    bias_enabled=bias_enabled,
-                    bias_voltage=bias_voltage,
-                    compliance_current=compliance_current,
+                    df_ipce = perform_live_monitoring(
+                        self.mono,
+                        self.smu,
+                        df_incbeamcurr,
+                        wavelength_nm=wavelength_nm,
 
-                    on_live_update=lambda message: self._emit(
-                        callbacks.get("on_live_update"), ui_dispatch, message
-                    ),
-                    on_status=lambda message: self._emit(
-                        callbacks.get("on_status"), ui_dispatch, message
-                    ),
-                    stop_requested=self.stop_requested,
-                    on_point_acquired=lambda **payload: self._emit(
-                        callbacks.get("on_point_acquired"), ui_dispatch, **payload
-                    ),
-                )
+                        bias_enabled=bias_enabled,
+                        bias_voltage=bias_voltage,
+                        compliance_current=compliance_current,
+
+                        on_live_update=lambda message: self._emit(
+                            callbacks.get("on_live_update"), ui_dispatch, message
+                        ),
+                        on_status=lambda message: self._emit(
+                            callbacks.get("on_status"), ui_dispatch, message
+                        ),
+                        stop_requested=self.stop_requested,
+                        on_point_acquired=lambda **payload: self._emit(
+                            callbacks.get("on_point_acquired"), ui_dispatch, **payload
+                        ),
+                    )
+
+                else:
+                    df_ipce = perform_measurement(
+                        self.mono,
+                        self.smu,
+                        df_incbeamcurr,
+                        params.calibration_measurement,
+                        nm_lim,
+                        delta_nm=params.interval,
+                        show_raw_signal=params.show_raw,
+                        stop_when_zero=params.stop_when_zero,
+
+                        bias_enabled=bias_enabled,
+                        bias_voltage=bias_voltage,
+                        compliance_current=compliance_current,
+
+                        on_live_update=lambda message: self._emit(
+                            callbacks.get("on_live_update"), ui_dispatch, message
+                        ),
+                        on_status=lambda message: self._emit(
+                            callbacks.get("on_status"), ui_dispatch, message
+                        ),
+                        stop_requested=self.stop_requested,
+                        on_point_acquired=lambda **payload: self._emit(
+                            callbacks.get("on_point_acquired"), ui_dispatch, **payload
+                        ),
+                    )
+
                 self._emit(callbacks.get("on_done"), ui_dispatch, df_ipce)
 
             except Exception as exc:
