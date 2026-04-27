@@ -82,6 +82,7 @@ def perform_measurement(
     if bias_enabled:
         try:
             smu.set_bias_voltage(bias_voltage)
+            smu.set_compliance_current(compliance_current)
             emit_status(f"SMU bias applied: {bias_voltage:.3f} V")
             emit_status(f"Compliance current: {compliance_current:.3e} A")
         except Exception as e:
