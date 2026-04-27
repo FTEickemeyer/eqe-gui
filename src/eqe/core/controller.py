@@ -82,6 +82,7 @@ class MeasurementController:
         nm_lim,
         bias_enabled=False,
         bias_voltage=0.0,
+        compliance_current=1e-3,
         callbacks=None,
         ui_dispatch=None,
     ):
@@ -107,9 +108,9 @@ class MeasurementController:
                     show_raw_signal=params.show_raw,
                     stop_when_zero=params.stop_when_zero,
 
-                    # NEW: bias parameters
                     bias_enabled=bias_enabled,
                     bias_voltage=bias_voltage,
+                    compliance_current=compliance_current,
 
                     on_live_update=lambda message: self._emit(
                         callbacks.get("on_live_update"), ui_dispatch, message

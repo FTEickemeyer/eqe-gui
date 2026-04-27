@@ -53,3 +53,4 @@ class MeasurementConfig:
 
     bias_enabled: bool
     bias_voltage: float
+    compliance_current: float

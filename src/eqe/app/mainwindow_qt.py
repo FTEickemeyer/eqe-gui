@@ -218,11 +218,9 @@ class MainWindow(QMainWindow):
                 params=params,
                 df_incbeamcurr=df_incbeamcurr,
                 nm_lim=nm_lim,
-
-                # NEW: bias parameters
                 bias_enabled=config.bias_enabled,
                 bias_voltage=config.bias_voltage,
-
+                compliance_current=config.compliance_current,
                 ui_dispatch=None,
                 callbacks={
                     "on_live_update": self.on_live_update,
@@ -323,6 +321,7 @@ class MainWindow(QMainWindow):
             # Electrical bias
             bias_enabled=bias["bias_enabled"],
             bias_voltage=bias["bias_voltage"],
+            compliance_current=bias["compliance_current"],
         )
 
         return config
