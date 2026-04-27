@@ -55,12 +55,29 @@ class BiasPanel(QWidget):
 
         layout.addRow("Bias voltage", self.bias_voltage_spin)
 
+        # ----------------------------------------
+        # Current compliance
+        # ----------------------------------------
+
+        self.compliance_current_spin = QDoubleSpinBox()
+
+        # Values are in mA in the GUI
+        self.compliance_current_spin.setRange(0.001, 100.0)
+        self.compliance_current_spin.setDecimals(3)
+        self.compliance_current_spin.setSingleStep(0.1)
+        self.compliance_current_spin.setValue(1.0)
+        self.compliance_current_spin.setSuffix(" mA")
+
+        layout.addRow("Current compliance", self.compliance_current_spin)
+
     def get_values(self):
         """
         Return bias settings.
         """
-
         return {
             "bias_enabled": self.enable_bias_checkbox.isChecked(),
             "bias_voltage": self.bias_voltage_spin.value(),
+
+            # Convert GUI mA to backend A
+            "compliance_current": self.compliance_current_spin.value() * 1e-3,
         }
