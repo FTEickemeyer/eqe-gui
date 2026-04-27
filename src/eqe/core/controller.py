@@ -20,31 +20,35 @@ class MeasurementController:
         return self._measurement_running
 
     def connect_instruments(
-    self,
-    mono=None,
-    smu=None,
-    N=None,
-    nplc=None,
-    interval=None,
-    simulate=False,
-    simulate_profile="good_cell",
-):
-        if N is None:
-            N = self.config["measurement"]["N"]
-        if nplc is None:
-            nplc = self.config["measurement"]["nplc"]
-        if interval is None:
-            interval = self.config["measurement"]["interval"]
+        self,
+        mono=None,
+        smu=None,
+        N=None,
+        nplc=None,
+        interval=None,
+        simulate=False,
+        simulate_profile="good_cell",
+    ):
+        # --------------------------------------------------
+        # Reuse already connected instruments
+        # --------------------------------------------------
+        if self.mono is not None and self.smu is not None:
+            print("Reusing existing instrument connections.")
+            return self.mono, self.smu
 
+        # --------------------------------------------------
+        # Otherwise initialize new ones
+        # --------------------------------------------------
         self.mono, self.smu = initialize_system(
-            mono=mono,
-            smu=smu,
+            mono=self.mono,
+            smu=self.smu,
             N=N,
             nplc=nplc,
             interval=interval,
             simulate=simulate,
             simulate_profile=simulate_profile,
         )
+
         return self.mono, self.smu
 
     def request_stop(self):
@@ -66,6 +70,8 @@ class MeasurementController:
         params,
         df_incbeamcurr,
         nm_lim,
+        bias_enabled=False,
+        bias_voltage=0.0,
         callbacks=None,
         ui_dispatch=None,
     ):
@@ -90,6 +96,11 @@ class MeasurementController:
                     delta_nm=params.interval,
                     show_raw_signal=params.show_raw,
                     stop_when_zero=params.stop_when_zero,
+
+                    # NEW: bias parameters
+                    bias_enabled=bias_enabled,
+                    bias_voltage=bias_voltage,
+
                     on_live_update=lambda message: self._emit(
                         callbacks.get("on_live_update"), ui_dispatch, message
                     ),
@@ -101,7 +112,6 @@ class MeasurementController:
                         callbacks.get("on_point_acquired"), ui_dispatch, **payload
                     ),
                 )
-
                 self._emit(callbacks.get("on_done"), ui_dispatch, df_ipce)
 
             except Exception as exc:

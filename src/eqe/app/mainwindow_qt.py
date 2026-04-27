@@ -153,6 +153,9 @@ class MainWindow(QMainWindow):
         - start controller.run_measurement_async(...)
         """
 
+        # Collect full config (NEW)
+        config = self.collect_measurement_config()
+
         try:
             # --------------------------------------------------
             # Build legacy MeasurementParams object
@@ -210,10 +213,16 @@ class MainWindow(QMainWindow):
             # ui_dispatch is left as None for now.
             # Thread-safe Qt dispatch will be the next step.
             # --------------------------------------------------
+            
             self.controller.run_measurement_async(
                 params=params,
                 df_incbeamcurr=df_incbeamcurr,
                 nm_lim=nm_lim,
+
+                # NEW: bias parameters
+                bias_enabled=config.bias_enabled,
+                bias_voltage=config.bias_voltage,
+
                 ui_dispatch=None,
                 callbacks={
                     "on_live_update": self.on_live_update,
@@ -225,6 +234,7 @@ class MainWindow(QMainWindow):
                 },
             )
 
+            
         except Exception as exc:
             self.log_panel.append(f"ERROR: {exc}")
 

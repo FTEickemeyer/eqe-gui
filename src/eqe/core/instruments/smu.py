@@ -150,6 +150,26 @@ class SMU:
         self.i_chB = np.asarray(i_chB)
         self.duration = duration
 
+    def set_bias_voltage(self, V):
+        """
+        Set DC bias voltage on channel B (test cell).
+        """
+        self.inst.write(f"smub.source.levelv = {V}")
+
+    def enable_output(self):
+        """
+        Enable SMU outputs.
+        """
+        self.inst.write("smua.source.output = smua.OUTPUT_ON")
+        self.inst.write("smub.source.output = smub.OUTPUT_ON")
+
+    def disable_output(self):
+        """
+        Disable SMU outputs.
+        """
+        self.inst.write("smua.source.output = smua.OUTPUT_OFF")
+        self.inst.write("smub.source.output = smub.OUTPUT_OFF")
+
     def get_average(self):
         return np.mean(self.i_chA), np.mean(self.i_chB)
 

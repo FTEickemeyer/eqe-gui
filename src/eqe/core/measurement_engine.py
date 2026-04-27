@@ -29,6 +29,8 @@ def perform_measurement(
     delta_nm=10,
     show_raw_signal=False,
     stop_when_zero=False,
+    bias_enabled=False,
+    bias_voltage=0.0,
     on_live_update=None,
     on_status=None,
     stop_requested=None,
@@ -67,7 +69,23 @@ def perform_measurement(
                 return False
         return False
 
+    if bias_enabled:
+        emit_status(f"Bias enabled: {bias_voltage:.3f} V")
+    else:
+        emit_status("Bias disabled")
     mono.shutter(True)
+
+    # ----------------------------------------
+    # Apply bias (initial implementation)
+    # ----------------------------------------
+    if bias_enabled:
+        try:
+            smu.set_bias_voltage(bias_voltage)
+            smu.enable_output()
+            emit_status(f"SMU bias applied: {bias_voltage:.3f} V")
+        except Exception as e:
+            emit_status(f"WARNING: Failed to apply bias: {e}")
+
     wavelengths = np.arange(nm_lim[0], nm_lim[1] + delta_nm, delta_nm)
 
     signal_A_arr = []
@@ -202,6 +220,16 @@ def perform_measurement(
             break
 
     mono.shutter(False)
+
+    # ----------------------------------------
+    # Reset bias safely
+    # ----------------------------------------
+    try:
+        smu.set_bias_voltage(0.0)
+        smu.disable_output()
+        emit_status("SMU bias reset to 0 V")
+    except Exception:
+        pass
 
     try:
         emit_status("Returning monochromator to 550 nm...")
