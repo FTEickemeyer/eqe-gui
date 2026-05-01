@@ -135,9 +135,13 @@ def perform_measurement(
                 incbeamcurr_div_intSirefcurrent = df_incbeamcurr[
                     "incident beam current (A)/intSiref current (A)"
                 ].loc[nm]
-                IPCE = cell_current / (incbeamcurr_div_intSirefcurrent * intSiref_current)
-                if IPCE < 0.0:
+                denominator = incbeamcurr_div_intSirefcurrent * intSiref_current
+                if abs(denominator) < 1e-15:
                     IPCE = 0.0
+                else:
+                    IPCE = cell_current / denominator
+                if not (0.0 <= IPCE <= 200.0):
+                    IPCE = max(0.0, min(IPCE, 200.0)) if np.isfinite(IPCE) else 0.0
                 IPCE_arr.append(IPCE)
                 current_IPCE_arr = np.array(IPCE_arr)
 
@@ -344,12 +348,13 @@ def perform_live_monitoring(
         intSiref_current = smu.chA - smu.chA_dark
         cell_current = smu.chB - smu.chB_dark
 
-        IPCE = cell_current / (
-            incbeamcurr_div_intSirefcurrent * intSiref_current
-        )
-
-        if IPCE < 0.0:
+        denominator = incbeamcurr_div_intSirefcurrent * intSiref_current
+        if abs(denominator) < 1e-15:
             IPCE = 0.0
+        else:
+            IPCE = cell_current / denominator
+        if not (0.0 <= IPCE <= 200.0):
+            IPCE = max(0.0, min(IPCE, 200.0)) if np.isfinite(IPCE) else 0.0
 
         elapsed_s = time.time() - t0
 
