@@ -5,7 +5,7 @@ import pandas as pd
 
 from eqe.io.paths import get_paths
 from eqe.config.load_config import load_config
-from eqe.analysis.calibration import df_interpolate
+from eqe.utils.dataframe import df_interpolate
 
 
 def save_data(
