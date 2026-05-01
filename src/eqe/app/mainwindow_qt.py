@@ -715,6 +715,21 @@ class MainWindow(QMainWindow):
 
         splitter.setSizes([400, 1000])
 
+    def closeEvent(self, event):
+        if self.controller.is_measuring:
+            self.controller.stop_measurement()
+            if self.controller._measurement_thread is not None:
+                self.controller._measurement_thread.join(timeout=3.0)
+
+        if self.controller.mono is not None:
+            try:
+                self.log_panel.append("Returning monochromator to 550 nm...")
+                self.controller.mono.goto_nm(550)
+            except Exception:
+                pass
+
+        event.accept()
+
     def _configure_plots_for_mode(self, mode):
         """
         Configure plot labels according to the selected measurement mode.
