@@ -29,4 +29,4 @@ results/
 *.pdf
 
 # Ignore the local config
-config/config_local.yaml
+src/eqe/config/config_local.yaml
