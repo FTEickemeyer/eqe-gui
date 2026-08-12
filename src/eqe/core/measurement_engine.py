@@ -2,8 +2,8 @@ import time
 import numpy as np
 import pandas as pd
 
-from FTE_analysis_libraries import General as gen
-from FTE_analysis_libraries import Spectrum as spc
+from fte_analysis_libraries import General as gen
+from fte_analysis_libraries import Spectrum as spc
 
 GRATING_CHANGE_NM = 850
 
@@ -154,7 +154,7 @@ def perform_measurement(
             if show_IPCE:
                 if nm > nm_lim[0] and len(current_IPCE_arr) >= 2:
                     try:
-                        sp = spc.diff_spectrum.AM15_nm(
+                        sp = spc.DiffSpectrum.am15_nm(
                             left=current_nm_arr[0],
                             right=current_nm_arr[-1],
                             delta=delta_nm,
