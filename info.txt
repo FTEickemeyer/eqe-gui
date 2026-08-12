@@ -1,3 +1,4 @@
+open git CMD
 cd /d C:\Users\labo\Documents\code\eqe-gui
 .venv\Scripts\activate
 
@@ -19,3 +20,20 @@ nocase:C:\Users\labo\Documents\code\eqe-gui\src\eqe\ content:data_dir
 feature branch: feature/pyside6-gui
 pip install PySide6
 
+next steps: 
+-set bias voltage always to 0 after a bias measurement
+-write bias voltage and comments in file 
+-write Keithley and spectrometer model in file
+-write cell area in file if not equal 0
+-write raw data in file
+-write spectral scan conditions and bias conditions in file
+-auto-save button
+-show also current integrated current as value
+-saved plot: overlap EQE and integrated current
+-rename standard live EQE --> live EQE
+-Simulation button only for Felix
+-Status/Log: latest first
+-autosave button
+-lock-in
+
+C:\Users\labo\.local\bin\claude --resume 725fc052-7aa8-4f62-b903-e54ee201ed5c
