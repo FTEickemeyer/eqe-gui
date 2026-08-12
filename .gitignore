@@ -30,3 +30,6 @@ results/
 
 # Ignore the local config
 src/eqe/config/config_local.yaml
+
+# Personal scratch notes
+info.txt
