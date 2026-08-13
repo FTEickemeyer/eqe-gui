@@ -169,6 +169,8 @@ class Keithley2400EQE(BiasCurrentMeter):
                 self.disconnect(safe=False)
                 raise RuntimeError(f"Unexpected instrument at {self.resource}: {identity}")
 
+            print(f"Connected via VISA ({self.resource}): {identity}")
+
         self.configure()
         return self.get_identity()
 
