@@ -59,10 +59,21 @@ class DualChannelSMUSession:
         pass
 
     def disconnect(self):
-        """Close the shared connection once. Safe to call from both channels."""
+        """
+        Close the shared connection once, safe to call from both channels.
+
+        Best-effort disables output before closing -- mirrors
+        Keithley2400EQE.disconnect()'s safe-shutdown behavior, so a
+        disconnect never leaves the test cell biased regardless of which
+        hardware profile is active.
+        """
         if self._closed:
             return
         self._closed = True
+        try:
+            self._smu.disable_output()
+        except Exception:
+            pass
         self._smu.close()
 
     def _ensure_measured(self):

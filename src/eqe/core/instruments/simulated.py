@@ -35,6 +35,7 @@ class SimulatedSMU:
         self.current_nm = 550
         self.bias_voltage = 0.0
         self.bias_enabled = False
+        self.compliance_current = 1e-3
 
     def set_wavelength(self, nm):
         self.current_nm = nm
@@ -102,6 +103,9 @@ class SimulatedSMU:
 
     def set_bias_voltage(self, V):
         self.bias_voltage = V
+
+    def set_compliance_current(self, I):
+        self.compliance_current = I
 
     def enable_output(self):
         self.bias_enabled = True

@@ -247,29 +247,32 @@ def perform_measurement(
     finally:
         # ----------------------------------------
         # Best-effort safe shutdown: always runs, whether the measurement
-        # finished normally, was stopped by the user, or raised.
+        # finished normally, was stopped by the user, or raised. Each step
+        # is independent (one failing must not skip the rest), but a
+        # failure is still surfaced -- silently swallowing it would leave
+        # the operator unaware the instrument might not be in a safe state.
         # ----------------------------------------
         try:
             mono.shutter(False)
-        except Exception:
-            pass
+        except Exception as e:
+            emit_status(f"WARNING: Failed to open monochromator shutter during cleanup: {e}")
 
         try:
             test_meter.set_bias_voltage(0.0)
             emit_status("SMU bias reset to 0 V")
-        except Exception:
-            pass
+        except Exception as e:
+            emit_status(f"WARNING: Failed to reset SMU bias to 0 V: {e}")
 
         try:
             test_meter.output_off()
-        except Exception:
-            pass
+        except Exception as e:
+            emit_status(f"WARNING: Failed to disable test-cell output: {e}")
 
         try:
             emit_status("Returning monochromator to 550 nm...")
             mono.goto_nm(550, on_status=emit_status)
-        except Exception:
-            pass
+        except Exception as e:
+            emit_status(f"WARNING: Failed to return monochromator to 550 nm: {e}")
 
     if not calibration_measurement:
         df = pd.DataFrame({
@@ -411,17 +414,18 @@ def perform_live_monitoring(
                 )
     finally:
         # Best-effort safe shutdown: always runs, whether monitoring was
-        # stopped by the user or raised.
+        # stopped by the user or raised. A failure here is still surfaced
+        # rather than swallowed -- see perform_measurement().
         try:
             test_meter.set_bias_voltage(0.0)
             emit_status("SMU bias reset to 0 V")
-        except Exception:
-            pass
+        except Exception as e:
+            emit_status(f"WARNING: Failed to reset SMU bias to 0 V: {e}")
 
         try:
             test_meter.output_off()
-        except Exception:
-            pass
+        except Exception as e:
+            emit_status(f"WARNING: Failed to disable test-cell output: {e}")
 
     emit_status("Live monitoring stopped")
 

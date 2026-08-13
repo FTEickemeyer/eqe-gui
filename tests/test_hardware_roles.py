@@ -425,5 +425,49 @@ class BuildHardwareTests(unittest.TestCase):
         self.assertIs(hardware.reference_meter._session.smu, fake_smu)
 
 
+class SimulatedHardwareBiasTests(unittest.TestCase):
+    """
+    Exercises the *real* simulated hardware path (factory.initialize_system
+    -> SimulatedSMU/SimulatedMonochromator, not a hand-written fake), so a
+    method the engine calls but the simulator doesn't implement fails this
+    test instead of only failing silently at runtime. A fake that diverges
+    from the real simulator (e.g. implementing set_compliance_current()
+    when SimulatedSMU doesn't) cannot mask a regression here.
+    """
+
+    def _calibration_df(self, wavelengths):
+        return pd.DataFrame(
+            {"incident beam current (A)/intSiref current (A)": [1.0] * len(wavelengths)},
+            index=list(wavelengths),
+        )
+
+    def test_bias_enabled_scan_against_real_simulated_hardware(self):
+        from eqe.core.instruments.factory import initialize_system
+
+        hardware = initialize_system(simulate=True, simulate_profile="good_cell")
+
+        warnings = []
+        df_incbeamcurr = self._calibration_df(range(400, 411, 10))
+
+        df = perform_measurement(
+            hardware,
+            df_incbeamcurr,
+            calibration_measurement=False,
+            nm_lim=(400, 410),
+            delta_nm=10,
+            bias_enabled=True,
+            bias_voltage=0.2,
+            compliance_current=1e-3,
+            on_status=warnings.append,
+        )
+
+        self.assertEqual(len(df), 2)
+        failed = [w for w in warnings if "Failed to apply bias" in w]
+        self.assertEqual(
+            failed, [], f"bias application failed against real simulated hardware: {failed}"
+        )
+        self.assertEqual(hardware.test_meter._session.smu.compliance_current, 1e-3)
+
+
 if __name__ == "__main__":
     unittest.main()
