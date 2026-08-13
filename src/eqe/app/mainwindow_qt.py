@@ -69,6 +69,13 @@ class MainWindow(QMainWindow):
     # Signal used to update the live numeric panel safely in the GUI thread
     live_numeric_signal = Signal(float, float, float)
 
+    # Generic dispatch signal: marshals an arbitrary measurement callback
+    # (with its args/kwargs) from the worker thread onto the GUI thread via
+    # Qt's queued cross-thread delivery. Passed to the controller as
+    # `ui_dispatch` so callbacks that touch widgets directly (log panel,
+    # etc.) never run outside the GUI thread.
+    _dispatch_signal = Signal(object, object, object)
+
     def __init__(self):
         super().__init__()
 
@@ -86,6 +93,7 @@ class MainWindow(QMainWindow):
         # Connect worker-thread point updates to a GUI-thread slot
         self.point_acquired_signal.connect(self._handle_point_acquired_gui)
         self.live_numeric_signal.connect(self._handle_live_numeric_gui)
+        self._dispatch_signal.connect(self._run_on_gui_thread, Qt.QueuedConnection)
 
         # --------------------------------------------------
         # 2. Map section identifiers to GUI widgets
@@ -218,11 +226,8 @@ class MainWindow(QMainWindow):
 
             # --------------------------------------------------
             # Start measurement
-            # NOTE:
-            # ui_dispatch is left as None for now.
-            # Thread-safe Qt dispatch will be the next step.
             # --------------------------------------------------
-            
+
             self.controller.run_measurement_async(
                 params=params,
                 df_incbeamcurr=df_incbeamcurr,
@@ -230,7 +235,7 @@ class MainWindow(QMainWindow):
                 bias_enabled=config.bias_enabled,
                 bias_voltage=config.bias_voltage,
                 compliance_current=config.compliance_current,
-                ui_dispatch=None,
+                ui_dispatch=self._dispatch_to_gui,
                 callbacks={
                     "on_live_update": self.on_live_update,
                     "on_status": self.on_status,
@@ -440,6 +445,21 @@ class MainWindow(QMainWindow):
             y2_value,
         )
 
+
+    def _run_on_gui_thread(self, callback, args, kwargs):
+        """
+        Slot for `_dispatch_signal`. Runs on the GUI thread (queued
+        connection), so it's safe for `callback` to touch widgets directly.
+        """
+        callback(*args, **kwargs)
+
+    def _dispatch_to_gui(self, callback, *args, **kwargs):
+        """
+        `ui_dispatch` passed to the controller: marshals any measurement
+        callback onto the GUI thread instead of running it on the worker
+        thread. Safe to call from any thread.
+        """
+        self._dispatch_signal.emit(callback, args, kwargs)
 
     def _handle_point_acquired_gui(self, wavelength, eqe, integrated_current):
         """
