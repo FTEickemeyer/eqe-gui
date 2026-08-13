@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QHBoxLayout,
 )
+from PySide6.QtGui import QTextCursor
 
 
 class LogPanel(QWidget):
@@ -68,7 +69,14 @@ class LogPanel(QWidget):
 
     def append(self, message):
         """
-        Append a message to the log.
+        Insert a message at the top of the log, so the most recent entry
+        is always visible without scrolling.
         """
 
-        self.log_text.append(message)
+        cursor = self.log_text.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+
+        if self.log_text.document().isEmpty():
+            cursor.insertText(message)
+        else:
+            cursor.insertText(message + "\n")
