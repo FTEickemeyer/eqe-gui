@@ -1,3 +1,4 @@
+README.md
 pyproject.toml
 src/eqe/__init__.py
 src/eqe/__main__.py
@@ -23,8 +24,12 @@ src/eqe/core/measurement_config.py
 src/eqe/core/measurement_engine.py
 src/eqe/core/models.py
 src/eqe/core/instruments/__init__.py
+src/eqe/core/instruments/dual_channel.py
 src/eqe/core/instruments/factory.py
+src/eqe/core/instruments/keithley2000.py
+src/eqe/core/instruments/keithley2400.py
 src/eqe/core/instruments/monochromator.py
+src/eqe/core/instruments/roles.py
 src/eqe/core/instruments/simulated.py
 src/eqe/core/instruments/smu.py
 src/eqe/io/__init__.py
@@ -38,3 +43,4 @@ src/eqe_gui.egg-info/PKG-INFO
 src/eqe_gui.egg-info/SOURCES.txt
 src/eqe_gui.egg-info/dependency_links.txt
 src/eqe_gui.egg-info/top_level.txt
+tests/test_hardware_roles.py

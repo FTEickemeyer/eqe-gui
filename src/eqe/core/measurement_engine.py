@@ -21,8 +21,7 @@ def interruptible_sleep(duration_s, stop_requested, chunk_s=0.05):
     return True
 
 def perform_measurement(
-    mono,
-    smu,
+    hardware,
     df_incbeamcurr,
     calibration_measurement,
     nm_lim,
@@ -40,9 +39,18 @@ def perform_measurement(
     """
     GUI-agnostic measurement loop.
 
+    `hardware` is a `MeasurementHardware` (see core/instruments/roles.py)
+    exposing `reference_meter`, `test_meter` and `monochromator`. This
+    function never assumes a particular instrument model -- only the
+    CurrentMeter / BiasCurrentMeter role API.
+
     Plotting is not handled here.
     Progress and data are emitted via callbacks.
     """
+
+    mono = hardware.monochromator
+    reference_meter = hardware.reference_meter
+    test_meter = hardware.test_meter
 
     if calibration_measurement:
         show_IPCE = False
@@ -77,12 +85,23 @@ def perform_measurement(
     mono.shutter(True)
 
     # ----------------------------------------
+    # The test-cell source output must be on to take any current reading
+    # (even an unbiased 0 V one) -- unconditionally re-enable it here so a
+    # previous scan's end-of-run output_off() cleanup doesn't leave the
+    # next scan's first reading waiting on a source that's off.
+    # ----------------------------------------
+    try:
+        test_meter.output_on()
+    except Exception as e:
+        emit_status(f"WARNING: Failed to enable test-cell output: {e}")
+
+    # ----------------------------------------
     # Apply bias (initial implementation)
     # ----------------------------------------
     if bias_enabled:
         try:
-            smu.set_bias_voltage(bias_voltage)
-            smu.set_compliance_current(compliance_current)
+            test_meter.set_bias_voltage(bias_voltage)
+            test_meter.set_compliance_current(compliance_current)
             emit_status(f"SMU bias applied: {bias_voltage:.3f} V")
             emit_status(f"Compliance current: {compliance_current:.3e} A")
         except Exception as e:
@@ -98,151 +117,159 @@ def perform_measurement(
 
     trapz_fn = getattr(np, "trapz", np.trapezoid)
 
-    for nm in wavelengths:
-        if should_stop():
-            emit_status("Measurement stopped.")
-            break
-
-        try:
-
-            mono.goto_nm(nm, on_status=emit_status)
-            mono.shutter(False)
-
+    try:
+        for nm in wavelengths:
             if should_stop():
                 emit_status("Measurement stopped.")
                 break
 
-            if nm == nm_lim[0] or nm == GRATING_CHANGE_NM:
-                if not interruptible_sleep(2.0, stop_requested):
+            try:
+
+                mono.goto_nm(nm, on_status=emit_status)
+                mono.shutter(False)
+
+                if should_stop():
                     emit_status("Measurement stopped.")
                     break
 
-            smu.run_dual_measurement()
+                if nm == nm_lim[0] or nm == GRATING_CHANGE_NM:
+                    if not interruptible_sleep(2.0, stop_requested):
+                        emit_status("Measurement stopped.")
+                        break
 
-            if should_stop():
-                emit_status("Measurement stopped.")
-                break
+                intSiref_current = reference_meter.measure_current() - reference_meter.dark_current
+                cell_current = test_meter.measure_current() - test_meter.dark_current
 
-            smu.chA, smu.chB = smu.get_average()
-            if getattr(smu, "compliance_hit", False):
-                emit_status(f"WARNING: Compliance limit reached at {nm} nm")
+                if should_stop():
+                    emit_status("Measurement stopped.")
+                    break
 
-            intSiref_current = smu.chA - smu.chA_dark
-            cell_current = smu.chB - smu.chB_dark
+                if getattr(test_meter, "compliance_hit", False):
+                    emit_status(f"WARNING: Compliance limit reached at {nm} nm")
 
-            IPCE = None
-            if not calibration_measurement:
-                incbeamcurr_div_intSirefcurrent = df_incbeamcurr[
-                    "incident beam current (A)/intSiref current (A)"
-                ].loc[nm]
-                denominator = incbeamcurr_div_intSirefcurrent * intSiref_current
-                if abs(denominator) < 1e-15:
-                    IPCE = 0.0
-                else:
-                    IPCE = cell_current / denominator
-                if not (0.0 <= IPCE <= 200.0):
-                    IPCE = max(0.0, min(IPCE, 200.0)) if np.isfinite(IPCE) else 0.0
-                IPCE_arr.append(IPCE)
-                current_IPCE_arr = np.array(IPCE_arr)
+                IPCE = None
+                if not calibration_measurement:
+                    incbeamcurr_div_intSirefcurrent = df_incbeamcurr[
+                        "incident beam current (A)/intSiref current (A)"
+                    ].loc[nm]
+                    denominator = incbeamcurr_div_intSirefcurrent * intSiref_current
+                    if abs(denominator) < 1e-15:
+                        IPCE = 0.0
+                    else:
+                        IPCE = cell_current / denominator
+                    if not (0.0 <= IPCE <= 200.0):
+                        IPCE = max(0.0, min(IPCE, 200.0)) if np.isfinite(IPCE) else 0.0
+                    IPCE_arr.append(IPCE)
+                    current_IPCE_arr = np.array(IPCE_arr)
 
-            signal_A_arr.append(intSiref_current)
-            signal_B_arr.append(cell_current)
-            measured_wavelengths.append(nm)
-            current_nm_arr = np.array(measured_wavelengths)
+                signal_A_arr.append(intSiref_current)
+                signal_B_arr.append(cell_current)
+                measured_wavelengths.append(nm)
+                current_nm_arr = np.array(measured_wavelengths)
 
-            int_curr = None
-            if show_IPCE:
-                if nm > nm_lim[0] and len(current_IPCE_arr) >= 2:
-                    try:
-                        sp = spc.DiffSpectrum.am15_nm(
-                            left=current_nm_arr[0],
-                            right=current_nm_arr[-1],
-                            delta=delta_nm,
-                        )
-                        int_curr = trapz_fn(
-                            current_IPCE_arr / 100 * sp.y * gen.q * 1e3 / 1e4,
-                            dx=delta_nm,
-                        )
-                    except Exception as e:
-                        print(f"Integration failed: {e}")
+                int_curr = None
+                if show_IPCE:
+                    if nm > nm_lim[0] and len(current_IPCE_arr) >= 2:
+                        try:
+                            sp = spc.DiffSpectrum.am15_nm(
+                                left=current_nm_arr[0],
+                                right=current_nm_arr[-1],
+                                delta=delta_nm,
+                            )
+                            int_curr = trapz_fn(
+                                current_IPCE_arr / 100 * sp.y * gen.q * 1e3 / 1e4,
+                                dx=delta_nm,
+                            )
+                        except Exception as e:
+                            print(f"Integration failed: {e}")
+                            int_curr = 0.0
+                    else:
                         int_curr = 0.0
-                else:
-                    int_curr = 0.0
-                int_curr_arr.append(int_curr)
+                    int_curr_arr.append(int_curr)
 
-            if should_stop():
-                emit_status("Measurement stopped.")
+                if should_stop():
+                    emit_status("Measurement stopped.")
+                    break
+
+                if show_raw_signal:
+                    emit_live_update(
+                        f"nm = {nm} nm - signal ref. cell (chA) = {intSiref_current:.2e} A "
+                        f"- signal test cell (chB) = {cell_current:.2e} A"
+                    )
+
+                if show_IPCE:
+                    emit_live_update(
+                        f"Wavelength = {nm} nm - IPCE = {IPCE:.1f} %\n"
+                        f"Integrated current = {int_curr:.2f} mA/cm2"
+                    )
+
+                if should_stop():
+                    emit_status("Measurement stopped.")
+                    break
+
+                if on_point_acquired is not None:
+                    on_point_acquired(
+                        # ----------------------------------------
+                        # New clean keys for the new Qt GUI
+                        # ----------------------------------------
+                        wavelength=float(nm),
+                        eqe=float(IPCE) if IPCE is not None else None,
+                        integrated_current=float(int_curr) if int_curr is not None else 0.0,
+                        cell_current=float(cell_current) if cell_current is not None else 0.0,
+                        ref_current=float(intSiref_current) if intSiref_current is not None else 0.0,
+
+                        # ----------------------------------------
+                        # Legacy keys kept for backward compatibility
+                        # ----------------------------------------
+                        nm=nm,
+                        measured_wavelengths=list(measured_wavelengths),
+                        signal_A_arr=list(signal_A_arr),
+                        signal_B_arr=list(signal_B_arr),
+                        IPCE_arr=list(IPCE_arr),
+                        int_curr_arr=list(int_curr_arr),
+                        intSiref_current=intSiref_current,
+                        cell_current_legacy=cell_current,
+                        IPCE=IPCE,
+                        int_curr=int_curr,
+                        show_IPCE=show_IPCE,
+                        show_raw_signal=show_raw_signal,
+                        nm_lim=nm_lim,
+                    )
+
+
+                if stop_when_zero and cell_current is not None and abs(cell_current) < 1e-7:
+                    emit_status("Measurement stopped because signal reached zero threshold.")
+                    break
+
+            except KeyboardInterrupt:
                 break
 
-            if show_raw_signal:
-                emit_live_update(
-                    f"nm = {nm} nm - signal ref. cell (chA) = {intSiref_current:.2e} A "
-                    f"- signal test cell (chB) = {cell_current:.2e} A"
-                )
+    finally:
+        # ----------------------------------------
+        # Best-effort safe shutdown: always runs, whether the measurement
+        # finished normally, was stopped by the user, or raised.
+        # ----------------------------------------
+        try:
+            mono.shutter(False)
+        except Exception:
+            pass
 
-            if show_IPCE:
-                emit_live_update(
-                    f"Wavelength = {nm} nm - IPCE = {IPCE:.1f} %\n"
-                    f"Integrated current = {int_curr:.2f} mA/cm2"
-                )
+        try:
+            test_meter.set_bias_voltage(0.0)
+            emit_status("SMU bias reset to 0 V")
+        except Exception:
+            pass
 
-            if should_stop():
-                emit_status("Measurement stopped.")
-                break
+        try:
+            test_meter.output_off()
+        except Exception:
+            pass
 
-            if on_point_acquired is not None:
-                on_point_acquired(
-                    # ----------------------------------------
-                    # New clean keys for the new Qt GUI
-                    # ----------------------------------------
-                    wavelength=float(nm),
-                    eqe=float(IPCE) if IPCE is not None else None,
-                    integrated_current=float(int_curr) if int_curr is not None else 0.0,
-                    cell_current=float(cell_current) if cell_current is not None else 0.0,
-                    ref_current=float(intSiref_current) if intSiref_current is not None else 0.0,
-
-                    # ----------------------------------------
-                    # Legacy keys kept for backward compatibility
-                    # ----------------------------------------
-                    nm=nm,
-                    measured_wavelengths=list(measured_wavelengths),
-                    signal_A_arr=list(signal_A_arr),
-                    signal_B_arr=list(signal_B_arr),
-                    IPCE_arr=list(IPCE_arr),
-                    int_curr_arr=list(int_curr_arr),
-                    intSiref_current=intSiref_current,
-                    cell_current_legacy=cell_current,
-                    IPCE=IPCE,
-                    int_curr=int_curr,
-                    show_IPCE=show_IPCE,
-                    show_raw_signal=show_raw_signal,
-                    nm_lim=nm_lim,
-                )
-                
-
-            if stop_when_zero and cell_current is not None and abs(cell_current) < 1e-7:
-                emit_status("Measurement stopped because signal reached zero threshold.")
-                break
-
-        except KeyboardInterrupt:
-            break
-
-    mono.shutter(False)
-
-    # ----------------------------------------
-    # Reset bias safely
-    # ----------------------------------------
-    try:
-        smu.set_bias_voltage(0.0)
-        emit_status("SMU bias reset to 0 V")
-    except Exception:
-        pass
-
-    try:
-        emit_status("Returning monochromator to 550 nm...")
-        mono.goto_nm(550, on_status=emit_status)
-    except Exception:
-        pass
+        try:
+            emit_status("Returning monochromator to 550 nm...")
+            mono.goto_nm(550, on_status=emit_status)
+        except Exception:
+            pass
 
     if not calibration_measurement:
         df = pd.DataFrame({
@@ -264,8 +291,7 @@ def perform_measurement(
 
 
 def perform_live_monitoring(
-    mono,
-    smu,
+    hardware,
     df_incbeamcurr,
     wavelength_nm,
     bias_enabled=False,
@@ -279,9 +305,13 @@ def perform_live_monitoring(
     """
     GUI-agnostic live monitoring loop at one fixed wavelength.
 
-    Reuses smu.run_dual_measurement().
-    Does not modify the SMU layer.
+    `hardware` is a `MeasurementHardware` -- see `perform_measurement()`.
+    Does not modify the instrument-driver layer.
     """
+
+    mono = hardware.monochromator
+    reference_meter = hardware.reference_meter
+    test_meter = hardware.test_meter
 
     def emit_live_update(message):
         if on_live_update is not None:
@@ -307,11 +337,18 @@ def perform_live_monitoring(
 
     emit_status(f"Live monitoring at {nm:.0f} nm")
 
+    # See perform_measurement(): the test-cell source output must be on to
+    # take any current reading, even an unbiased 0 V one.
+    try:
+        test_meter.output_on()
+    except Exception as e:
+        emit_status(f"WARNING: Failed to enable test-cell output: {e}")
+
     if bias_enabled:
         emit_status(f"Bias enabled: {bias_voltage:.3f} V")
         try:
-            smu.set_bias_voltage(bias_voltage)
-            smu.set_compliance_current(compliance_current)
+            test_meter.set_bias_voltage(bias_voltage)
+            test_meter.set_compliance_current(compliance_current)
             emit_status(f"SMU bias applied: {bias_voltage:.3f} V")
             emit_status(f"Compliance current: {compliance_current:.3e} A")
         except Exception as e:
@@ -337,49 +374,54 @@ def perform_live_monitoring(
 
     t0 = time.time()
 
-    while not should_stop():
+    try:
+        while not should_stop():
 
-        smu.run_dual_measurement()
-        smu.chA, smu.chB = smu.get_average()
+            intSiref_current = reference_meter.measure_current() - reference_meter.dark_current
+            cell_current = test_meter.measure_current() - test_meter.dark_current
 
-        if getattr(smu, "compliance_hit", False):
-            emit_status(f"WARNING: Compliance limit reached at {nm:.0f} nm")
+            if getattr(test_meter, "compliance_hit", False):
+                emit_status(f"WARNING: Compliance limit reached at {nm:.0f} nm")
 
-        intSiref_current = smu.chA - smu.chA_dark
-        cell_current = smu.chB - smu.chB_dark
+            denominator = incbeamcurr_div_intSirefcurrent * intSiref_current
+            if abs(denominator) < 1e-15:
+                IPCE = 0.0
+            else:
+                IPCE = cell_current / denominator
+            if not (0.0 <= IPCE <= 200.0):
+                IPCE = max(0.0, min(IPCE, 200.0)) if np.isfinite(IPCE) else 0.0
 
-        denominator = incbeamcurr_div_intSirefcurrent * intSiref_current
-        if abs(denominator) < 1e-15:
-            IPCE = 0.0
-        else:
-            IPCE = cell_current / denominator
-        if not (0.0 <= IPCE <= 200.0):
-            IPCE = max(0.0, min(IPCE, 200.0)) if np.isfinite(IPCE) else 0.0
+            elapsed_s = time.time() - t0
 
-        elapsed_s = time.time() - t0
-
-        emit_live_update(
-            f"Live EQE at {nm:.0f} nm = {IPCE:.2f} %"
-        )
-
-        if on_point_acquired is not None:
-            on_point_acquired(
-                wavelength=elapsed_s,          # x-axis is now time
-                eqe=float(IPCE),
-                integrated_current=0.0,
-                cell_current=float(cell_current),
-                ref_current=float(intSiref_current),
-
-                # explicit live-mode keys
-                time_s=float(elapsed_s),
-                fixed_wavelength_nm=float(nm),
+            emit_live_update(
+                f"Live EQE at {nm:.0f} nm = {IPCE:.2f} %"
             )
 
-    try:
-        smu.set_bias_voltage(0.0)
-        emit_status("SMU bias reset to 0 V")
-    except Exception:
-        pass
+            if on_point_acquired is not None:
+                on_point_acquired(
+                    wavelength=elapsed_s,          # x-axis is now time
+                    eqe=float(IPCE),
+                    integrated_current=0.0,
+                    cell_current=float(cell_current),
+                    ref_current=float(intSiref_current),
+
+                    # explicit live-mode keys
+                    time_s=float(elapsed_s),
+                    fixed_wavelength_nm=float(nm),
+                )
+    finally:
+        # Best-effort safe shutdown: always runs, whether monitoring was
+        # stopped by the user or raised.
+        try:
+            test_meter.set_bias_voltage(0.0)
+            emit_status("SMU bias reset to 0 V")
+        except Exception:
+            pass
+
+        try:
+            test_meter.output_off()
+        except Exception:
+            pass
 
     emit_status("Live monitoring stopped")
 

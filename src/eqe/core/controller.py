@@ -1,4 +1,5 @@
 import threading
+import traceback
 
 from eqe.config.load_config import load_config
 from eqe.core.instruments.factory import initialize_system
@@ -10,13 +11,23 @@ from eqe.app.qt_models import STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE
 
 class MeasurementController:
     def __init__(self):
-        self.mono = None
-        self.smu = None
+        self.hardware = None
         self.config = load_config()
 
         self._measurement_thread = None
         self._stop_event = threading.Event()
         self._measurement_running = False
+
+    @property
+    def mono(self):
+        """
+        Backward-compatible accessor for the monochromator.
+
+        The GUI reads `controller.mono` directly (e.g. to return it to
+        550 nm on stop); `controller.hardware.monochromator` is the
+        canonical reference.
+        """
+        return self.hardware.monochromator if self.hardware is not None else None
 
     @property
     def is_measuring(self):
@@ -35,16 +46,15 @@ class MeasurementController:
         # --------------------------------------------------
         # Reuse already connected instruments
         # --------------------------------------------------
-        if self.mono is not None and self.smu is not None:
+        if self.hardware is not None:
             print("Reusing existing instrument connections.")
-            return self.mono, self.smu
+            return self.hardware
 
         # --------------------------------------------------
         # Otherwise initialize new ones
         # --------------------------------------------------
-        self.mono, self.smu = initialize_system(
-            mono=self.mono,
-            smu=self.smu,
+        self.hardware = initialize_system(
+            hardware=self.hardware,
             N=N,
             nplc=nplc,
             interval=interval,
@@ -52,7 +62,7 @@ class MeasurementController:
             simulate_profile=simulate_profile,
         )
 
-        return self.mono, self.smu
+        return self.hardware
 
     def request_stop(self):
         self._stop_event.set()
@@ -92,7 +102,7 @@ class MeasurementController:
         if self._measurement_running:
             raise RuntimeError("A measurement is already running.")
 
-        if self.mono is None or self.smu is None:
+        if self.hardware is None:
             raise RuntimeError("Instruments are not connected.")
 
         callbacks = callbacks or {}
@@ -105,8 +115,7 @@ class MeasurementController:
                     wavelength_nm = params.wl_start
 
                     df_ipce = perform_live_monitoring(
-                        self.mono,
-                        self.smu,
+                        self.hardware,
                         df_incbeamcurr,
                         wavelength_nm=wavelength_nm,
 
@@ -128,8 +137,7 @@ class MeasurementController:
 
                 else:
                     df_ipce = perform_measurement(
-                        self.mono,
-                        self.smu,
+                        self.hardware,
                         df_incbeamcurr,
                         params.calibration_measurement,
                         nm_lim,
@@ -156,6 +164,9 @@ class MeasurementController:
                 self._emit(callbacks.get("on_done"), ui_dispatch, df_ipce)
 
             except Exception as exc:
+                # The GUI only logs str(exc); print the full traceback to the
+                # console so the failing call site is diagnosable.
+                traceback.print_exc()
                 self._emit(callbacks.get("on_error"), ui_dispatch, exc)
 
             finally:
