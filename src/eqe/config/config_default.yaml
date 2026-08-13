@@ -48,6 +48,12 @@ instruments:
         ramp_steps: 10
         ramp_delay_s: 0.05
         discard_first_reading: true
+        # Match the Keithley 2600 path's near-compliance warning threshold
+        # (smu.py hardcodes 0.95 -- protected/untouched). The 2400 driver
+        # defaults to 0.98 standalone; overridden here so a scan reports a
+        # compliance warning at the same margin regardless of which
+        # hardware profile is active.
+        compliance_fraction: 0.95
         # The connection is kept open across scans (no reconnect between
         # measurements). If a new scan starts at a much smaller current
         # than the previous one ended at, current autorange can take

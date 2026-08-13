@@ -169,6 +169,27 @@ class PerformMeasurementRoleAgnosticTests(unittest.TestCase):
         expected_ref = reference_meter.value - reference_meter.dark_current
         self.assertAlmostEqual(df["Current ref-chA (A)"].iloc[0], expected_ref)
 
+    def test_descending_direction_scans_high_to_low(self):
+        mono = FakeMonochromator()
+        reference_meter = FakeCurrentMeter()
+        test_meter = FakeBiasCurrentMeter()
+        hardware = MeasurementHardware(
+            reference_meter=reference_meter, test_meter=test_meter, monochromator=mono
+        )
+
+        df_incbeamcurr = self._calibration_df(range(400, 421, 10))
+
+        df = perform_measurement(
+            hardware,
+            df_incbeamcurr,
+            calibration_measurement=False,
+            nm_lim=(400, 420),
+            delta_nm=10,
+            direction="Descending",
+        )
+
+        self.assertEqual(list(df.index), [420, 410, 400])
+
     def test_bias_is_applied_and_reset_on_normal_completion(self):
         mono = FakeMonochromator()
         reference_meter = FakeCurrentMeter()
@@ -467,6 +488,60 @@ class SimulatedHardwareBiasTests(unittest.TestCase):
             failed, [], f"bias application failed against real simulated hardware: {failed}"
         )
         self.assertEqual(hardware.test_meter._session.smu.compliance_current, 1e-3)
+
+
+class ControllerReconnectTests(unittest.TestCase):
+    """
+    connect_instruments() must reconnect when the requested
+    simulate/simulate_profile no longer matches the connected hardware,
+    instead of silently reusing real hardware after Simulation is
+    unchecked (or vice versa).
+    """
+
+    def test_reconnects_when_simulate_toggle_changes(self):
+        from eqe.core import controller as controller_module
+
+        ctrl = controller_module.MeasurementController()
+
+        calls = []
+
+        def fake_initialize_system(
+            hardware=None, N=None, nplc=None, interval=None,
+            simulate=False, simulate_profile="good_cell",
+        ):
+            calls.append(simulate)
+            return MeasurementHardware(
+                reference_meter=FakeCurrentMeter(),
+                test_meter=FakeBiasCurrentMeter(),
+                monochromator=FakeMonochromator(),
+            )
+
+        with mock.patch.object(
+            controller_module, "initialize_system", side_effect=fake_initialize_system
+        ):
+            ctrl.connect_instruments(simulate=True)
+            ctrl.connect_instruments(simulate=True)  # same flag -> reuse
+            ctrl.connect_instruments(simulate=False)  # changed -> reconnect
+
+        self.assertEqual(calls, [True, False])
+
+
+class FactorySimulateSwitchTests(unittest.TestCase):
+    """Switching to simulated hardware must not leak a prior connection."""
+
+    def test_switching_to_simulate_closes_previous_hardware(self):
+        from eqe.core.instruments.factory import initialize_system
+
+        closed = {"called": False}
+
+        class FakeOldHardware:
+            def close(self):
+                closed["called"] = True
+
+        hardware = initialize_system(hardware=FakeOldHardware(), simulate=True)
+
+        self.assertTrue(closed["called"])
+        self.assertIsInstance(hardware, MeasurementHardware)
 
 
 if __name__ == "__main__":

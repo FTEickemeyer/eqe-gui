@@ -1,11 +1,15 @@
-# Measurement mode identifiers
-
-STANDARD_EQE = "standard_eqe"
-BIASED_EQE = "biased_eqe"
-STANDARD_LIVE_EQE = "standard_live_eqe"
-
-LOCKIN_EQE_BG = "lockin_eqe_background"
-LOCKIN_LIVE_EQE = "lockin_live_eqe"
+# Measurement mode identifiers.
+#
+# Canonically defined in core/models.py (backend must not depend on the
+# GUI package); re-exported here so existing GUI imports keep working.
+from eqe.core.models import (
+    STANDARD_EQE,
+    BIASED_EQE,
+    STANDARD_LIVE_EQE,
+    LOCKIN_EQE_BG,
+    LOCKIN_LIVE_EQE,
+    LIVE_MODES,
+)
 
 # User-facing labels
 

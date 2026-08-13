@@ -7,7 +7,7 @@ from eqe.core.measurement_engine import (
     perform_measurement,
     perform_live_monitoring,
 )
-from eqe.app.qt_models import STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE
+from eqe.core.models import LIVE_MODES
 
 class MeasurementController:
     def __init__(self):
@@ -17,6 +17,12 @@ class MeasurementController:
         self._measurement_thread = None
         self._stop_event = threading.Event()
         self._measurement_running = False
+
+        # What `simulate`/`simulate_profile` self.hardware was actually
+        # built with, so a changed toggle triggers a reconnect instead of
+        # silently reusing the wrong (real vs. simulated) instruments.
+        self._connected_simulate = None
+        self._connected_simulate_profile = None
 
     @property
     def mono(self):
@@ -44,9 +50,16 @@ class MeasurementController:
         simulate_profile="good_cell",
         ):
         # --------------------------------------------------
-        # Reuse already connected instruments
+        # Reuse already connected instruments -- but only if they match
+        # the requested simulate/simulate_profile. Toggling Simulation in
+        # the GUI and clicking Start again is an explicit request for
+        # different hardware, not an accidental reconnect.
         # --------------------------------------------------
-        if self.hardware is not None:
+        if (
+            self.hardware is not None
+            and self._connected_simulate == simulate
+            and self._connected_simulate_profile == simulate_profile
+        ):
             print("Reusing existing instrument connections.")
             return self.hardware
 
@@ -61,6 +74,8 @@ class MeasurementController:
             simulate=simulate,
             simulate_profile=simulate_profile,
         )
+        self._connected_simulate = simulate
+        self._connected_simulate_profile = simulate_profile
 
         return self.hardware
 
@@ -96,6 +111,7 @@ class MeasurementController:
         bias_enabled=False,
         bias_voltage=0.0,
         compliance_current=1e-3,
+        direction="Ascending",
         callbacks=None,
         ui_dispatch=None,
     ):
@@ -111,7 +127,7 @@ class MeasurementController:
 
         def worker():
             try:
-                if getattr(params, "mode", None) in (STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE):
+                if getattr(params, "mode", None) in LIVE_MODES:
                     wavelength_nm = params.wl_start
 
                     df_ipce = perform_live_monitoring(
@@ -148,6 +164,8 @@ class MeasurementController:
                         bias_enabled=bias_enabled,
                         bias_voltage=bias_voltage,
                         compliance_current=compliance_current,
+                        grating_change_nm=self.config["calibration"]["grating_change_nm"],
+                        direction=direction,
 
                         on_live_update=lambda message: self._emit(
                             callbacks.get("on_live_update"), ui_dispatch, message

@@ -8,15 +8,20 @@ def create_user_directory(measurements_dir, user, debug=False):
     """
     Create and return the dated user directory for measurement data.
 
+    This is the single source of truth for the save-folder naming
+    convention -- callers (e.g. mainwindow_qt.py's manual save) should use
+    this instead of building the path themselves, so autosave and manual
+    save always agree on where a given day's data lives.
+
     Example:
-        C:\\Users\\...\\Documents\\EQE\\measurements\\user\\260313_IPCE
+        C:\\Users\\...\\Documents\\EQE\\measurements\\user\\260313_EQE
     """
     measurements_dir = Path(measurements_dir)
 
     user_root = measurements_dir / user
     user_root.mkdir(parents=True, exist_ok=True)
 
-    date_folder = datetime.datetime.now().strftime("%y%m%d") + "_IPCE"
+    date_folder = datetime.datetime.now().strftime("%y%m%d") + "_EQE"
     user_dir = user_root / date_folder
 
     if debug:

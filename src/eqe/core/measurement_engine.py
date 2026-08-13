@@ -5,6 +5,10 @@ import pandas as pd
 from fte_analysis_libraries import General as gen
 from fte_analysis_libraries import Spectrum as spc
 
+# Default only -- perform_measurement() takes grating_change_nm as a
+# parameter so the actual value always matches whatever was passed to the
+# monochromator driver (config.calibration.grating_change_nm; see
+# controller.py). Kept here as a fallback for standalone/direct calls.
 GRATING_CHANGE_NM = 850
 
 def interruptible_sleep(duration_s, stop_requested, chunk_s=0.05):
@@ -35,6 +39,8 @@ def perform_measurement(
     on_status=None,
     stop_requested=None,
     on_point_acquired=None,
+    grating_change_nm=GRATING_CHANGE_NM,
+    direction="Ascending",
 ):
     """
     GUI-agnostic measurement loop.
@@ -108,6 +114,8 @@ def perform_measurement(
             emit_status(f"WARNING: Failed to apply bias: {e}")
 
     wavelengths = np.arange(nm_lim[0], nm_lim[1] + delta_nm, delta_nm)
+    if str(direction).strip().lower() == "descending":
+        wavelengths = wavelengths[::-1]
 
     signal_A_arr = []
     signal_B_arr = []
@@ -132,7 +140,9 @@ def perform_measurement(
                     emit_status("Measurement stopped.")
                     break
 
-                if nm == nm_lim[0] or nm == GRATING_CHANGE_NM:
+                # wavelengths[0] (not nm_lim[0]) is the actual first point
+                # in scan order -- for a descending scan that's nm_lim[1].
+                if nm == wavelengths[0] or nm == grating_change_nm:
                     if not interruptible_sleep(2.0, stop_requested):
                         emit_status("Measurement stopped.")
                         break
@@ -304,12 +314,19 @@ def perform_live_monitoring(
     on_status=None,
     stop_requested=None,
     on_point_acquired=None,
+    update_interval_s=0.5,
 ):
     """
     GUI-agnostic live monitoring loop at one fixed wavelength.
 
     `hardware` is a `MeasurementHardware` -- see `perform_measurement()`.
     Does not modify the instrument-driver layer.
+
+    `update_interval_s` paces readings so the loop doesn't hammer the
+    serial/VISA link as fast as the instruments can respond, and so the
+    GUI's live plot doesn't accumulate points unboundedly fast during a
+    long-running session. There is no GUI control for this yet -- see
+    CLAUDE.md roadmap item 3 (acquisition settings panel).
     """
 
     mono = hardware.monochromator
@@ -412,6 +429,9 @@ def perform_live_monitoring(
                     time_s=float(elapsed_s),
                     fixed_wavelength_nm=float(nm),
                 )
+
+            if update_interval_s > 0:
+                interruptible_sleep(update_interval_s, stop_requested)
     finally:
         # Best-effort safe shutdown: always runs, whether monitoring was
         # stopped by the user or raised. A failure here is still surfaced

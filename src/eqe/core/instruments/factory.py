@@ -189,6 +189,12 @@ def initialize_system(
     """
 
     if simulate:
+        if hardware is not None:
+            # Switching from real to simulated hardware (or between
+            # simulate profiles) must still close whatever was connected
+            # before -- otherwise the old connection leaks.
+            hardware.close()
+
         sim_smu = SimulatedSMU(profile=simulate_profile)
         sim_mono = SimulatedMonochromator(smu=sim_smu)
 

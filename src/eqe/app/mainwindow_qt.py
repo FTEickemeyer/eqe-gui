@@ -16,7 +16,6 @@ Main area:
 """
 
 from pathlib import Path
-from datetime import datetime
 
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -57,7 +56,7 @@ from eqe.app.widgets.eqe_plot_widget import EQEPlotWidget
 from eqe.app.widgets.integrated_current_plot_widget import IntegratedCurrentPlotWidget
 from eqe.app.qt_models import STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE
 from eqe.io.data_io import save_data
-from eqe.io.paths import get_paths
+from eqe.io.paths import get_paths, create_user_directory
 
 
 
@@ -235,6 +234,7 @@ class MainWindow(QMainWindow):
                 bias_enabled=config.bias_enabled,
                 bias_voltage=config.bias_voltage,
                 compliance_current=config.compliance_current,
+                direction=config.direction,
                 ui_dispatch=self._dispatch_to_gui,
                 callbacks={
                     "on_live_update": self.on_live_update,
@@ -273,14 +273,11 @@ class MainWindow(QMainWindow):
             sample_name = self.metadata_panel.sample_name_edit.text().strip() or "sample"
             user_name = self.session_panel.get_user().strip() or "user"
 
-            # Build the target directory:
-            # <measurements_dir>/<user_name>
+            # Build the target directory via the single shared
+            # implementation (io/paths.py), so manual save and any future
+            # autosave land in the same place for a given day/user.
             measurements_dir = Path(get_paths()["measurements_dir"])
-
-            # Create date-based folder: YYMMDD_EQE
-            date_str = datetime.now().strftime("%y%m%d")
-            session_dir = measurements_dir / user_name / f"{date_str}_EQE"
-            session_dir.mkdir(parents=True, exist_ok=True)
+            session_dir = create_user_directory(measurements_dir, user_name)
 
             # For now:
             # - normal EQE measurement
@@ -567,6 +564,11 @@ class MainWindow(QMainWindow):
             # Show or hide the widget
             widget.setVisible(visible)
 
+        # Live modes only use the scan panel's start wavelength (see
+        # controller.py's worker()); stop/step/direction are otherwise
+        # collected from the GUI but silently ignored, which is confusing.
+        self.scan_panel.set_range_fields_visible(mode not in (STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE))
+
 
     def _build_ui(self):
         """
@@ -738,8 +740,26 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         if self.controller.is_measuring:
             self.controller.stop_measurement()
-            if self.controller._measurement_thread is not None:
-                self.controller._measurement_thread.join(timeout=3.0)
+            worker = self.controller._measurement_thread
+            if worker is not None:
+                worker.join(timeout=3.0)
+
+                if worker.is_alive():
+                    # The worker didn't stop in time. It may still be using
+                    # the serial/VISA connection -- including its own
+                    # finally-block cleanup, which already returns the
+                    # monochromator to 550 nm (see measurement_engine.py).
+                    # Calling mono.goto_nm() here too would race with that
+                    # from a second thread on the same connection, so skip
+                    # it and close anyway; the worker is a daemon thread
+                    # and will be terminated when the process exits.
+                    self.log_panel.append(
+                        "WARNING: Measurement did not stop within 3s; "
+                        "closing without waiting further. Instrument "
+                        "cleanup may still be in progress."
+                    )
+                    event.accept()
+                    return
 
         if self.controller.mono is not None:
             try:
