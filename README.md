@@ -36,18 +36,20 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-The `pip install -e .` step is required even though `requirements.txt` also lists an
-editable install of this repo — that entry points at a specific GitHub commit and
-will *not* pick up your local checkout. Running `pip install -e .` afterward makes
-sure the `eqe` package resolves to the code in your working directory rather than a
-fetched copy.
+`pip install -e .` is the step that makes the `eqe` package resolve to the code in
+your local checkout, in editable mode (uses `pyproject.toml`). `requirements.txt`
+covers everything else (pinned third-party dependencies).
 
-> **Gotcha:** if you ever copy this project folder (or its `.venv`) to a different
-> path or a different Windows user account, the editable install remembers the *old*
-> absolute path and Python will silently keep importing from there. Symptoms are
-> import errors that reference a path you don't recognize, or a running app that
-> reads/writes files in someone else's user folder. Fix: re-run `pip install -e .`
-> from the new location.
+> **Gotcha:** a venv is not relocatable by copying files. `.venv/Scripts/activate.bat`
+> and `.venv/pyvenv.cfg` bake in the *absolute path* the venv was created at. If you
+> ever copy this project folder (or its `.venv`) to a different path or a different
+> Windows user account, `activate` will silently put the *old* location's `Scripts`
+> folder on `PATH`, and `where python` will resolve to the old account's interpreter
+> even while your prompt correctly shows the new folder. Symptoms: `where python`
+> pointing at someone else's profile, or import errors/tracebacks referencing a path
+> you don't recognize. Fix: delete `.venv` and recreate it from scratch in the new
+> location (`python -m venv .venv`), then repeat the `pip install` steps above —
+> don't copy an existing `.venv` between accounts or machines.
 
 ## Configuration — do this on every new machine/account
 
