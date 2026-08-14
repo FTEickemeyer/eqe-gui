@@ -97,6 +97,19 @@ class DualChannelSMUSession:
         return getattr(self._smu, "compliance_hit", False)
 
 
+def _describe_dual_channel_smu(smu, channel: str) -> str:
+    """Identity string for a dual-channel role (real SMU or SimulatedSMU)."""
+    model = getattr(smu, "Keithley_model", None)
+    if model:
+        base = f"Keithley {model}"
+        sn = getattr(smu, "SN", None)
+        if sn:
+            base += f" (SN {sn})"
+    else:
+        base = type(smu).__name__  # e.g. "SimulatedSMU"
+    return f"{base}, channel {channel}"
+
+
 class DualChannelReferenceMeter(CurrentMeter):
     """Reference-signal role backed by channel A of a shared dual-channel session."""
 
@@ -112,6 +125,10 @@ class DualChannelReferenceMeter(CurrentMeter):
 
     def measure_current(self) -> float:
         return self._session.read_channel("A")
+
+    @property
+    def identity(self) -> str:
+        return _describe_dual_channel_smu(self._session.smu, "A")
 
 
 class DualChannelTestMeter(BiasCurrentMeter):
@@ -129,6 +146,10 @@ class DualChannelTestMeter(BiasCurrentMeter):
 
     def measure_current(self) -> float:
         return self._session.read_channel("B")
+
+    @property
+    def identity(self) -> str:
+        return _describe_dual_channel_smu(self._session.smu, "B")
 
     def set_bias_voltage(self, voltage: float):
         self._session.smu.set_bias_voltage(voltage)

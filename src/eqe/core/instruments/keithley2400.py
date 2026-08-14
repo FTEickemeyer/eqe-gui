@@ -143,6 +143,10 @@ class Keithley2400EQE(BiasCurrentMeter):
         self.dark_current = 0.0
         self.compliance_hit = False
 
+        #: Identity string captured at connect time (role API, used e.g.
+        #: to record which hardware was used in a saved measurement file).
+        self.identity = None
+
     # ------------------------------------------------------------------
     # Connection
     # ------------------------------------------------------------------
@@ -169,6 +173,7 @@ class Keithley2400EQE(BiasCurrentMeter):
                 self.disconnect(safe=False)
                 raise RuntimeError(f"Unexpected instrument at {self.resource}: {identity}")
 
+            self.identity = identity
             print(f"Connected via VISA ({self.resource}): {identity}")
 
         self.configure()

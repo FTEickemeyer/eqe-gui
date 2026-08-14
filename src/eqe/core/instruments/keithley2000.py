@@ -108,6 +108,10 @@ class Keithley2000(CurrentMeter):
 
         self.dark_current = 0.0
 
+        #: Identity string captured at connect time (role API, used e.g.
+        #: to record which hardware was used in a saved measurement file).
+        self.identity = None
+
     # =========================================================
     # Connection
     # =========================================================
@@ -129,6 +133,7 @@ class Keithley2000(CurrentMeter):
             self.disconnect()
             raise RuntimeError(f"Unexpected instrument: {identity}")
 
+        self.identity = identity
         print(f"Connected via {self.interface.upper()}: {identity}")
 
         self.configure()

@@ -162,7 +162,11 @@ def build_hardware(config, N=None, nplc=None, interval=None):
         instruments_cfg["mono_port"],
         grating_change_nm=config["calibration"]["grating_change_nm"],
     )
-    print(mono.info)
+    # Cornerstone130.info queries the instrument live on every access;
+    # cache it once here rather than re-querying it later (e.g. when
+    # writing a saved measurement's hardware header).
+    mono.identity = mono.info
+    print(mono.identity)
 
     return MeasurementHardware(
         reference_meter=reference_meter,
@@ -197,6 +201,7 @@ def initialize_system(
 
         sim_smu = SimulatedSMU(profile=simulate_profile)
         sim_mono = SimulatedMonochromator(smu=sim_smu)
+        sim_mono.identity = f"Simulated monochromator (profile: {simulate_profile})"
 
         session = DualChannelSMUSession(sim_smu)
         hardware = MeasurementHardware(

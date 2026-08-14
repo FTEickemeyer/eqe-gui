@@ -8,15 +8,116 @@ from eqe.config.load_config import load_config
 from eqe.utils.dataframe import df_interpolate
 
 
+def _hardware_identity_lines(hardware):
+    """
+    Identity lines for the hardware header, mirroring what's printed to
+    the console on connect (see instruments/factory.py and the
+    individual drivers' connect() methods).
+    """
+    if hardware is None:
+        return []
+
+    ref = getattr(hardware, "reference_meter", None)
+    test = getattr(hardware, "test_meter", None)
+    mono = getattr(hardware, "monochromator", None)
+
+    return [
+        "# Hardware:",
+        f"#   Reference meter: {getattr(ref, 'identity', None) or 'unknown'}",
+        f"#   Test-cell meter: {getattr(test, 'identity', None) or 'unknown'}",
+        f"#   Monochromator:   {getattr(mono, 'identity', None) or 'unknown'}",
+        "#",
+    ]
+
+
+def _metadata_lines(metadata):
+    """`metadata` is the dict returned by MetadataPanel.get_values()."""
+    if metadata is None:
+        return []
+
+    lines = [
+        "# Sample / Metadata:",
+        f"#   Sample name: {metadata.get('sample_name', '')}",
+        f"#   Cell area (cm2): {metadata.get('cell_area_cm2', '')}",
+    ]
+
+    comments = metadata.get("comments", "") or ""
+    comment_lines = comments.splitlines() or [""]
+    for i, line in enumerate(comment_lines):
+        prefix = "Comments: " if i == 0 else "          "
+        lines.append(f"#   {prefix}{line}")
+
+    lines.append("#")
+    return lines
+
+
+def _scan_lines(scan):
+    """`scan` is the dict returned by ScanPanel.get_values()."""
+    if scan is None:
+        return []
+
+    return [
+        "# Spectral scan conditions:",
+        f"#   Start wavelength (nm): {scan.get('start_nm', '')}",
+        f"#   Stop wavelength (nm): {scan.get('stop_nm', '')}",
+        f"#   Step size (nm): {scan.get('step_nm', '')}",
+        f"#   Direction: {scan.get('direction', '')}",
+        "#",
+    ]
+
+
+def _bias_lines(bias):
+    """`bias` is the dict returned by BiasPanel.get_values()."""
+    if bias is None:
+        return []
+
+    compliance_A = bias.get("compliance_current")
+    compliance_mA = compliance_A * 1e3 if compliance_A is not None else None
+
+    return [
+        "# Bias:",
+        f"#   Bias enabled: {bias.get('bias_enabled', False)}",
+        f"#   Bias voltage (V): {bias.get('bias_voltage', '')}",
+        f"#   Compliance current (mA): {compliance_mA}",
+        "#",
+    ]
+
+
+def build_measurement_header(hardware=None, metadata=None, scan=None, bias=None):
+    """
+    Build the commented metadata preamble written before the data table in
+    a saved measurement CSV: used hardware, sample/metadata, spectral scan
+    conditions, and bias settings. Any section is omitted if its dict/
+    object isn't provided, so this stays optional for callers that don't
+    have that context (e.g. the calibration-file save path below).
+    """
+
+    lines = [
+        "# EQE measurement",
+        f"# Date: {datetime.datetime.now().isoformat(sep=' ', timespec='seconds')}",
+        "#",
+    ]
+
+    lines += _hardware_identity_lines(hardware)
+    lines += _metadata_lines(metadata)
+    lines += _scan_lines(scan)
+    lines += _bias_lines(bias)
+
+    return "\n".join(lines) + "\n"
+
+
 def save_data(
     df,
     df_ref,
     sample_name,
     user_dir,
     calibration_measurement,
-    save_raw_data=False,
     debug=False,
     fig=None,
+    hardware=None,
+    metadata=None,
+    scan=None,
+    bias=None,
 ):
     user_dir = Path(user_dir)
 
@@ -25,10 +126,14 @@ def save_data(
 
     fp_ipce = user_dir / f"EQE_{sample_name}_date{dat_time_file}.csv"
 
-    if save_raw_data or calibration_measurement:
-        df.to_csv(fp_ipce)
-    else:
-        df[["EQE (%)", "Integrated current (mA/cm2)"]].to_csv(fp_ipce)
+    header = build_measurement_header(hardware=hardware, metadata=metadata, scan=scan, bias=bias)
+
+    # Always include the raw reference/test-cell currents alongside EQE
+    # (previously the GUI's save path silently dropped "Current ref-chA
+    # (A)"/"Current cell-chB (A)").
+    with open(fp_ipce, "w", newline="", encoding="utf-8") as f:
+        f.write(header)
+        df.to_csv(f)
 
     if fig is not None:
         fp_fig = user_dir / f"EQE_{sample_name}_date{dat_time_file}.png"

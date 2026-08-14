@@ -269,8 +269,14 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            # Use current GUI values for naming
-            sample_name = self.metadata_panel.sample_name_edit.text().strip() or "sample"
+            # Use current GUI values for naming and for the saved file's
+            # metadata header (used hardware, sample/metadata, scan
+            # conditions, bias).
+            metadata = self.metadata_panel.get_values()
+            scan = self.scan_panel.get_values()
+            bias = self.bias_panel.get_values()
+
+            sample_name = metadata["sample_name"] or "sample"
             user_name = self.session_panel.get_user().strip() or "user"
 
             # Build the target directory via the single shared
@@ -281,7 +287,6 @@ class MainWindow(QMainWindow):
 
             # For now:
             # - normal EQE measurement
-            # - no raw save
             # - no reference dataframe needed
             fp = save_data(
                 df=self._last_result_df,
@@ -289,8 +294,11 @@ class MainWindow(QMainWindow):
                 sample_name=sample_name,
                 user_dir=session_dir,
                 calibration_measurement=False,
-                save_raw_data=False,
                 fig=self.eqe_plot_widget.figure,
+                hardware=self.controller.hardware,
+                metadata=metadata,
+                scan=scan,
+                bias=bias,
             )
 
             self.log_panel.append(f"Saved: {fp}")
