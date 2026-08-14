@@ -498,6 +498,51 @@ class LiveMonitoringWavelengthChangeTests(unittest.TestCase):
         # readings must be the one for 600 nm, not stale from 550 nm.
         self.assertEqual(mono.position, 600)
 
+    def test_returns_time_series_dataframe_including_wavelength_changes(self):
+        """
+        perform_live_monitoring() must return the actual time-series data
+        (not an empty DataFrame) so it can be saved -- including the
+        per-point wavelength, since it can change mid-run.
+        """
+        mono = FakeMonochromator()
+        reference_meter = FakeCurrentMeter(value=1e-6)
+        test_meter = FakeBiasCurrentMeter(value=2e-6)
+        hardware = MeasurementHardware(
+            reference_meter=reference_meter, test_meter=test_meter, monochromator=mono
+        )
+
+        df_incbeamcurr = self._calibration_df(range(400, 601, 10))
+
+        targets = iter([550, 600, 600])
+
+        def get_target_wavelength():
+            return next(targets, 600)
+
+        calls = {"n": 0}
+
+        def stop_requested():
+            calls["n"] += 1
+            return calls["n"] > 3
+
+        df = perform_live_monitoring(
+            hardware,
+            df_incbeamcurr,
+            wavelength_nm=550,
+            stop_requested=stop_requested,
+            update_interval_s=0,
+            get_target_wavelength=get_target_wavelength,
+        )
+
+        self.assertEqual(df.index.name, "Time (s)")
+        self.assertEqual(
+            list(df.columns),
+            ["Wavelength (nm)", "EQE (%)", "Current ref (A)", "Current cell (A)"],
+        )
+        self.assertEqual(len(df), 3)
+        # First reading(s) at 550, later ones after the change at 600.
+        self.assertEqual(df["Wavelength (nm)"].iloc[0], 550.0)
+        self.assertEqual(df["Wavelength (nm)"].iloc[-1], 600.0)
+
     def test_no_target_wavelength_callback_behaves_as_before(self):
         """get_target_wavelength=None (the default) must not change behavior."""
         mono = FakeMonochromator()

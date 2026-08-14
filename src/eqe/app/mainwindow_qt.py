@@ -316,9 +316,14 @@ class MainWindow(QMainWindow):
         try:
             # Use current GUI values for naming and for the saved file's
             # metadata header (used hardware, sample/metadata, scan
-            # conditions, bias).
+            # conditions, bias). Live modes measure at a single wavelength
+            # that can itself change over time -- it's saved as data (see
+            # perform_live_monitoring()'s "Wavelength (nm)" column), not a
+            # fixed setting, so there's no "spectral scan conditions" to
+            # report in the header for them.
             metadata = self.metadata_panel.get_values()
-            scan = self.scan_panel.get_values()
+            is_live = getattr(self, "_active_mode", None) in LIVE_MODES
+            scan = None if is_live else self.scan_panel.get_values()
             bias = self.bias_panel.get_values()
 
             sample_name = metadata["sample_name"] or "sample"

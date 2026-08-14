@@ -318,10 +318,16 @@ def perform_live_monitoring(
     get_target_wavelength=None,
 ):
     """
-    GUI-agnostic live monitoring loop at one fixed wavelength.
+    GUI-agnostic live monitoring loop at one fixed (but changeable, see
+    `get_target_wavelength`) wavelength.
 
     `hardware` is a `MeasurementHardware` -- see `perform_measurement()`.
     Does not modify the instrument-driver layer.
+
+    Returns a DataFrame indexed by "Time (s)" with columns "Wavelength
+    (nm)" (the wavelength actually measured at each point -- changes if
+    `get_target_wavelength` moved it mid-run), "EQE (%)", "Current ref
+    (A)", "Current cell (A)".
 
     `update_interval_s` paces readings so the loop doesn't hammer the
     serial/VISA link as fast as the instruments can respond, and so the
@@ -406,6 +412,12 @@ def perform_live_monitoring(
 
     t0 = time.time()
 
+    time_arr = []
+    wavelength_arr = []
+    eqe_arr = []
+    ref_current_arr = []
+    cell_current_arr = []
+
     try:
         while not should_stop():
 
@@ -441,6 +453,12 @@ def perform_live_monitoring(
                 IPCE = max(0.0, min(IPCE, 200.0)) if np.isfinite(IPCE) else 0.0
 
             elapsed_s = time.time() - t0
+
+            time_arr.append(elapsed_s)
+            wavelength_arr.append(nm)
+            eqe_arr.append(IPCE)
+            ref_current_arr.append(intSiref_current)
+            cell_current_arr.append(cell_current)
 
             emit_live_update(
                 f"Live EQE at {nm:.0f} nm = {IPCE:.2f} %"
@@ -478,4 +496,12 @@ def perform_live_monitoring(
 
     emit_status("Live monitoring stopped")
 
-    return pd.DataFrame()
+    df = pd.DataFrame({
+        "Time (s)": np.asarray(time_arr),
+        "Wavelength (nm)": np.asarray(wavelength_arr),
+        "EQE (%)": np.asarray(eqe_arr),
+        "Current ref (A)": np.asarray(ref_current_arr),
+        "Current cell (A)": np.asarray(cell_current_arr),
+    })
+    df.set_index("Time (s)", inplace=True)
+    return df
