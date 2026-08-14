@@ -114,6 +114,8 @@ def _advanced_lines(advanced):
     return [
         "# Advanced acquisition settings:",
         f"#   Stabilization time (ms): {advanced.get('stabilization_time_ms', '')}",
+        f"#   Reference meter mode: {advanced.get('reference_meter_mode', '')}",
+        f"#   Shunt resistance (ohm): {advanced.get('shunt_resistance_ohms', '')}",
         "#",
     ]
 

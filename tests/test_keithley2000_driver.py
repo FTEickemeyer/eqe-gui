@@ -96,5 +96,113 @@ class Keithley2000RangeConfigurationTests(unittest.TestCase):
         self.assertIn(":SENS:CURR:DC:RANG:AUTO ON", sent)
 
 
+# ---------------------------------------------------------------------
+# Voltage-shunt mode (added 2026-08-14): the reference cell's current is
+# sensed as a voltage drop across a known external shunt resistor wired
+# to the Input HI/LO terminals, converted back to an equivalent current
+# before it leaves this driver -- see class docstring.
+# ---------------------------------------------------------------------
+
+class Keithley2000VoltageShuntModeTests(unittest.TestCase):
+    def test_mode_defaults_to_current(self):
+        """
+        The constructor default stays "current" for any caller that
+        doesn't specify a mode -- it's the GUI's Advanced Acquisition
+        Settings panel that defaults to "voltage_shunt" instead, matching
+        the lab's actual wiring (see advanced_acquisition_panel.py).
+        """
+        meter, _ = _make_meter()
+        self.assertEqual(meter.mode, Keithley2000.MODE_CURRENT)
+
+    def test_set_mode_voltage_shunt_configures_volt_dc(self):
+        meter, sent = _make_meter(voltage_range=0.1)
+        meter.set_mode("voltage_shunt")
+
+        self.assertEqual(meter.mode, "voltage_shunt")
+        self.assertIn(":SENS:FUNC 'VOLT:DC'", sent)
+        self.assertIn(":SENS:VOLT:DC:RANG 0.1", sent)
+        self.assertIn(":SENS:VOLT:DC:RANG:AUTO OFF", sent)
+        self.assertIn(":SENS:VOLT:DC:NPLC 5.0", sent)
+        # No CURR:DC commands should be sent while in voltage_shunt mode.
+        self.assertFalse(any(cmd.startswith(":SENS:CURR:DC") for cmd in sent))
+
+    def test_set_mode_back_to_current_configures_curr_dc(self):
+        meter, sent = _make_meter(mode="voltage_shunt", shunt_resistance_ohms=598)
+        meter.set_mode("current")
+
+        self.assertEqual(meter.mode, "current")
+        self.assertIn(":SENS:FUNC 'CURR:DC'", sent)
+        self.assertFalse(any(cmd.startswith(":SENS:VOLT:DC") for cmd in sent))
+
+    def test_set_mode_rejects_unknown_mode(self):
+        meter, _ = _make_meter()
+        with self.assertRaises(ValueError):
+            meter.set_mode("not_a_real_mode")
+
+    def test_configure_current_measurement_mode_and_shunt_hook(self):
+        meter, sent = _make_meter()
+        meter.configure_current_measurement(mode="voltage_shunt", shunt_resistance_ohms=598)
+
+        self.assertEqual(meter.mode, "voltage_shunt")
+        self.assertEqual(meter.shunt_resistance_ohms, 598.0)
+        self.assertIn(":SENS:FUNC 'VOLT:DC'", sent)
+
+    def test_read_current_converts_voltage_by_shunt_resistance(self):
+        meter, _ = _make_meter(mode="voltage_shunt", shunt_resistance_ohms=598)
+        # 598 ohm shunt at ~7 uA -> roughly 4.19 mV, matching the real
+        # hardware wiring (confirmed positive on real hardware 2026-08-14).
+        meter.query = lambda cmd: "0.00418964"
+
+        result = meter.read_current()
+
+        self.assertAlmostEqual(result, 0.00418964 / 598, places=12)
+
+    def test_read_current_converts_negative_voltage_too(self):
+        """Sign-agnostic: the conversion must not assume a particular polarity."""
+        meter, _ = _make_meter(mode="voltage_shunt", shunt_resistance_ohms=598)
+        meter.query = lambda cmd: "-0.00418964"
+
+        result = meter.read_current()
+
+        self.assertAlmostEqual(result, -0.00418964 / 598, places=12)
+
+    def test_read_current_in_current_mode_is_unconverted(self):
+        meter, _ = _make_meter(mode="current")
+        meter.query = lambda cmd: "-2.28e-06"
+
+        self.assertEqual(meter.read_current(), -2.28e-06)
+
+    def test_read_current_raises_if_shunt_resistance_not_set(self):
+        meter, _ = _make_meter(mode="voltage_shunt")  # shunt_resistance_ohms left None
+        meter.query = lambda cmd: "0.001"
+
+        with self.assertRaises(RuntimeError):
+            meter.read_current()
+
+    def test_get_configuration_queries_volt_subsystem_in_voltage_shunt_mode(self):
+        meter, _ = _make_meter(mode="voltage_shunt", shunt_resistance_ohms=598)
+        queried = []
+
+        def fake_query(cmd):
+            queried.append(cmd)
+            if cmd == ":SENS:FUNC?":
+                return "\"VOLT:DC\""
+            if "RANG:AUTO" in cmd:
+                return "0"
+            if "RANG" in cmd:
+                return "0.1"
+            if "NPLC" in cmd:
+                return "5.0"
+            return "0"
+
+        meter.query = fake_query
+        cfg = meter.get_configuration()
+
+        self.assertEqual(cfg["mode"], "voltage_shunt")
+        self.assertEqual(cfg["shunt_resistance_ohms"], 598)
+        self.assertTrue(any(cmd.startswith(":SENS:VOLT:DC:RANG") for cmd in queried))
+        self.assertFalse(any(cmd.startswith(":SENS:CURR:DC:RANG") for cmd in queried))
+
+
 if __name__ == "__main__":
     unittest.main()

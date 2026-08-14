@@ -128,12 +128,40 @@ scan mode, live mode, and saving without any instrument connected.
 
 ### Advanced Acquisition Settings
 
+This panel is greyed out (visible, but not editable) unless logged in as the
+developer user (`felix`) — a wrong value here, especially the reference meter
+settings below, silently affects every measurement that follows. All settings in
+this panel are recorded in the metadata header of saved files.
+
 **Stabilization time** (default 100 ms) is how long the measurement waits after the
 monochromator moves to a new wavelength, before taking a reading — giving the
 cell's photocurrent time to settle. It applies after every wavelength move in both
 scan mode and live mode (including wavelength changes made mid-run from the
-Wavelength setting panel). All settings in this panel are recorded in the metadata
-header of saved files.
+Wavelength setting panel).
+
+**Reference meter mode** controls how the Keithley 2000 senses the internal
+reference cell's signal:
+
+- **Voltage (shunt resistor)** — the default, matching the lab's wiring as of
+  2026-08-14. The reference cell's photocurrent is read as a voltage drop across a
+  known external shunt resistor (**Shunt resistance**, default 598 Ω) wired to the
+  instrument's Input HI/LO terminals, then converted back to an equivalent current.
+  This exists because the Keithley 2000's DC current function only has one,
+  oversized range (10 mA) — far larger than this reference cell's actual signal
+  (~10s of nA to a few µA) — giving poor resolution; DC voltage ranges go much
+  lower, giving far better resolution for a weak signal like this one.
+- **Current (direct)** — the original setup: the reference cell's current is read
+  directly on the instrument's DC current function.
+
+> **This is a software *and* hardware setting — they must match.** Switching the
+> dropdown alone does not move any wires. As of 2026-08-14 the reference cell is
+> wired to the Input HI/LO terminals for the shunt-resistor method; the AMPS/current
+> input the old "Current (direct)" mode expects is no longer connected, so selecting
+> "Current (direct)" without first rewiring back to the AMPS/INPUT LO terminals
+> (INPUTS selector set to FRONT) will read near-zero noise, not the real signal. To
+> go back to direct current sensing, physically rewire the reference cell to the
+> AMPS/INPUT LO terminals *and* switch the dropdown to "Current (direct)" — either
+> alone, without the other, is wrong.
 
 ## Calibration
 

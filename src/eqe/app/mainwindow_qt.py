@@ -323,6 +323,22 @@ class MainWindow(QMainWindow):
             )
 
             # --------------------------------------------------
+            # Apply Advanced Acquisition Settings to the (possibly reused,
+            # already-connected) reference meter -- instrument connections
+            # are persistent/reused across runs (see connect_instruments()),
+            # so whatever's currently set in the GUI must be pushed to the
+            # real instrument on every start, not just once at connect
+            # time. configure_current_measurement() is a no-op on roles
+            # that don't support it (e.g. the Keithley 2600 profile), so
+            # this is safe regardless of which hardware profile is active.
+            # --------------------------------------------------
+            advanced = self.advanced_acquisition_panel.get_values()
+            self.controller.hardware.reference_meter.configure_current_measurement(
+                mode=advanced["reference_meter_mode"],
+                shunt_resistance_ohms=advanced["shunt_resistance_ohms"],
+            )
+
+            # --------------------------------------------------
             # Load calibration
             # --------------------------------------------------
             df_incbeamcurr, df_ref, fp_incbeamcurr = open_calibration(
@@ -352,9 +368,7 @@ class MainWindow(QMainWindow):
             # Start measurement
             # --------------------------------------------------
 
-            stabilization_time_s = (
-                self.advanced_acquisition_panel.get_values()["stabilization_time_ms"] / 1000.0
-            )
+            stabilization_time_s = advanced["stabilization_time_ms"] / 1000.0
 
             self.controller.run_measurement_async(
                 params=params,
@@ -761,6 +775,14 @@ class MainWindow(QMainWindow):
         self.calibration_group.setVisible(sections.get(SECTION_CALIBRATION, False) and is_dev)
         if not is_dev:
             self.calibration_panel.calibration_measurement_checkbox.setChecked(False)
+
+        # Advanced Acquisition Settings (stabilization time, reference
+        # meter mode/shunt resistance) are developer-only to *edit* --
+        # greyed out (not hidden) for everyone else, since a wrong value
+        # here (especially the shunt resistance) silently corrupts every
+        # measurement that follows, but other users still need to see
+        # what's currently configured and are still affected by it.
+        self.advanced_acquisition_panel.setEnabled(is_dev)
 
         # Integrated current is only meaningful over a wavelength sweep;
         # it's structurally always 0 during live monitoring at a single

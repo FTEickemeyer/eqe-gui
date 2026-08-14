@@ -48,7 +48,16 @@ def _build_keithley2000(role_cfg):
     if "gpib_resource" in conn:
         kwargs["gpib_resource"] = conn["gpib_resource"]
 
-    for key in ("nplc", "autorange", "current_range", "samples", "timeout"):
+    for key in (
+        "nplc",
+        "autorange",
+        "current_range",
+        "samples",
+        "mode",
+        "shunt_resistance_ohms",
+        "voltage_range",
+        "timeout",
+    ):
         if key in role_cfg:
             kwargs[key] = role_cfg[key]
 

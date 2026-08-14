@@ -148,7 +148,7 @@ These rules are non-negotiable. Apply them to every change, in every file.
 | Live Monitoring (Live EQE) | Fixed-wavelength continuous acquisition, changeable mid-run, real time-series save | ✅ Stable, verified on real hardware |
 | Electrical Control | SMU bias voltage + compliance, always reset to 0 V when a measurement ends | ✅ Stable |
 | Calibration measurement | Produces a new incident-beam calibration from the external Si71889 cell; felix-only for now | ✅ Stable, verified on real hardware |
-| Advanced Acquisition Settings | Stabilization time after each wavelength move (scan + live); recorded in saved metadata | ✅ Stable |
+| Advanced Acquisition Settings | Stabilization time; reference-meter mode (direct current vs. voltage-across-shunt) + shunt resistance; felix-only to edit, recorded in saved metadata | ✅ Stable, verified on real hardware |
 | Lock-in EQE / Lock-in Live EQE | Modulated-light EQE workflow | 🚧 Not implemented; menu entries felix-only |
 
 ---
@@ -159,8 +159,17 @@ Work through this roadmap **in order**. Do not skip ahead.
 
 Done (kept here for context, not to be redone): live mode has its own time-domain data
 buffers and plot infra separate from scan mode; live-mode CSV logging of time/
-wavelength/EQE/currents; an Advanced Acquisition Settings panel exists (currently just
-stabilization time — extend it, don't replace it, for future acquisition parameters).
+wavelength/EQE/currents; an Advanced Acquisition Settings panel exists (stabilization
+time, reference-meter mode/shunt resistance — extend it, don't replace it, for future
+acquisition parameters), felix-only to edit (see Hard Constraints).
+
+Note: the reference meter's "Current (direct)"/"Voltage (shunt)" mode (see
+keithley2000.py's `mode`) is a *software* setting that must match the instrument's
+*physical* wiring — the GUI panel doesn't move any wires. As of 2026-08-14 the
+reference cell is wired for voltage-shunt sensing (Input HI/LO terminals); the old
+direct-current wiring (AMPS/INPUT LO) is disconnected, so "Current (direct)" won't
+read anything meaningful until it's physically reconnected too (see README's Advanced
+Acquisition Settings section).
 
 1. **Modulation control** (hardware abstraction layer)
 

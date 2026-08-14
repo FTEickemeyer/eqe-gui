@@ -24,21 +24,28 @@ Language:     SCPI
 
 Measurement configuration
 --------------------------
-Function:     DC current
-Range:        10 mA fixed (autorange OFF)
-NPLC:         1
-Filter:       OFF
-Relative:     OFF
+Two modes (see `mode`); NPLC=5, filter/relative OFF in both:
 
-The reference signal can be close to zero near the start of a scan
-(e.g. ~350 nm). Autorange is intentionally left OFF with a fixed range,
-matching the tested/validated configuration -- do not make range
-selection depend on an assumption of significant background current.
+- "current" (the original tested configuration): DC current function,
+  10 mA fixed range, autorange OFF. This instrument's DC current
+  function only has this one range -- confirmed on real hardware, any
+  smaller requested range is silently clamped back to it -- which is far
+  larger than the reference cell's actual signal (~10s of nA to a few
+  uA), especially at the weaker-signal wavelengths of a sweep. Use the
+  FRONT-panel AMPS / INPUT LO, INPUTS selector set to FRONT.
 
-Hardware
---------
-For DC current measurements, use the FRONT-panel AMPS / INPUT LO.
-Set INPUTS selector to FRONT.
+- "voltage_shunt" (added 2026-08-14, current default -- see
+  AdvancedAcquisitionPanel): DC voltage function, fixed range (see
+  `voltage_range`), reading the voltage drop across a known external
+  shunt resistor wired to the Input HI/LO terminals, converted back to
+  an equivalent current (voltage / shunt_resistance_ohms) before it
+  reaches the rest of the app. DC voltage ranges go much lower than DC
+  current ones on this instrument, giving far better resolution for a
+  weak signal like this one.
+
+Both modes still benefit from higher NPLC (longer integration): measured
+on real hardware, NPLC 1->5 cut relative noise ~5x at a weak-signal
+point; NPLC=10 gave no further improvement for ~2x the time.
 """
 
 import time
@@ -98,9 +105,35 @@ class Keithley2000(CurrentMeter):
         `nplc` was measured to reduce noise more efficiently than raising
         this, since each extra sample here costs a full extra serial
         round-trip on top of its integration time.
+    mode : str
+        "current" (direct DC current sensing, the original tested
+        configuration) or "voltage_shunt" (DC voltage sensing across a
+        known external shunt resistor, see `shunt_resistance_ohms`; added
+        2026-08-14, see class docstring). Default: "current" -- the GUI's
+        Advanced Acquisition Settings panel defaults to "voltage_shunt"
+        instead, matching the lab's actual current wiring; this
+        constructor default stays conservative for any other caller.
+    shunt_resistance_ohms : float or None
+        The external shunt resistor's resistance, used to convert a
+        voltage reading back to an equivalent current
+        (current = voltage / shunt_resistance_ohms) when `mode` is
+        "voltage_shunt". Required (raises at read time otherwise) in that
+        mode; unused in "current" mode.
+    voltage_range : float
+        Fixed DC-voltage range in volts, used only when `mode` is
+        "voltage_shunt" (autorange is not used for this function -- see
+        set_mode()). Default: 0.1 (100 mV) -- comfortably covers the
+        expected signal (e.g. 598 ohm shunt at up to ~7 uA is ~4.2 mV;
+        a future 10 kOhm+ shunt at the same current would be ~70 mV+).
+        Raise this if a larger shunt resistor and/or higher current later
+        pushes the expected drop closer to 100 mV.
     timeout : float
         Communication timeout in seconds.
     """
+
+    #: `mode` values (role-agnostic strings, not SCPI text).
+    MODE_CURRENT = "current"
+    MODE_VOLTAGE_SHUNT = "voltage_shunt"
 
     def __init__(
         self,
@@ -112,6 +145,9 @@ class Keithley2000(CurrentMeter):
         autorange=True,
         current_range=0.01,
         samples=1,
+        mode=MODE_CURRENT,
+        shunt_resistance_ohms=None,
+        voltage_range=0.1,
         timeout=2.0,
     ):
         self.interface = interface.lower()
@@ -127,6 +163,11 @@ class Keithley2000(CurrentMeter):
         self.autorange = autorange
         self.current_range = current_range
         self.samples = samples
+        self.mode = mode
+        self.shunt_resistance_ohms = (
+            float(shunt_resistance_ohms) if shunt_resistance_ohms is not None else None
+        )
+        self.voltage_range = voltage_range
         self.timeout = timeout
 
         self.ser = None
@@ -245,31 +286,75 @@ class Keithley2000(CurrentMeter):
         self.write("*RST")
         time.sleep(0.3)
 
-        # DC current function
-        self.write(":SENS:FUNC 'CURR:DC'")
-
-        # Range: autorange by default (see class docstring) so the reading
-        # keeps good resolution across the reference cell's full dynamic
-        # range; a fixed range is only used if autorange is explicitly off.
-        if self.autorange:
-            self.write(":SENS:CURR:DC:RANG:AUTO ON")
-        else:
-            self.write(f":SENS:CURR:DC:RANG {self.current_range}")
-            self.write(":SENS:CURR:DC:RANG:AUTO OFF")
-
-        # Integration time
-        self.write(f":SENS:CURR:DC:NPLC {self.nplc}")
-
-        # Relative measurement off
-        self.write(":SENS:CURR:DC:REF:STAT OFF")
-
-        # Internal averaging/filter off
-        self.write(":SENS:CURR:DC:AVER:STAT OFF")
+        # Function/range/NPLC/filter setup -- shared with set_mode() below,
+        # since switching between "current" and "voltage_shunt" needs the
+        # exact same per-function setup this does at connect time.
+        self.set_mode(self.mode)
 
         time.sleep(0.2)
 
-    def configure_current_measurement(self, nplc=None, current_range=None, autorange=None):
-        """Runtime reconfiguration hook (role API)."""
+    def set_mode(self, mode):
+        """
+        Switch between direct current sensing ("current", the original
+        tested configuration) and voltage-across-a-known-shunt-resistor
+        sensing ("voltage_shunt", see `shunt_resistance_ohms`/class
+        docstring). Reconfigures the relevant SCPI function/range/NPLC
+        from scratch -- these are independent per-function subsystems on
+        the instrument, so switching FUNC doesn't carry settings across.
+        """
+
+        if mode not in (self.MODE_CURRENT, self.MODE_VOLTAGE_SHUNT):
+            raise ValueError(f"Unknown Keithley 2000 measurement mode: {mode!r}")
+
+        self.mode = mode
+
+        if mode == self.MODE_CURRENT:
+            self.write(":SENS:FUNC 'CURR:DC'")
+
+            # Range: autorange by default (see class docstring) so the
+            # reading keeps good resolution across the reference cell's
+            # full dynamic range; a fixed range is only used if autorange
+            # is explicitly off.
+            if self.autorange:
+                self.write(":SENS:CURR:DC:RANG:AUTO ON")
+            else:
+                self.write(f":SENS:CURR:DC:RANG {self.current_range}")
+                self.write(":SENS:CURR:DC:RANG:AUTO OFF")
+
+            self.write(f":SENS:CURR:DC:NPLC {self.nplc}")
+            self.write(":SENS:CURR:DC:REF:STAT OFF")
+            self.write(":SENS:CURR:DC:AVER:STAT OFF")
+
+        else:  # MODE_VOLTAGE_SHUNT
+            self.write(":SENS:FUNC 'VOLT:DC'")
+
+            # Fixed range (not autorange, see class docstring) -- large
+            # enough to comfortably cover the expected shunt voltage drop.
+            self.write(f":SENS:VOLT:DC:RANG {self.voltage_range}")
+            self.write(":SENS:VOLT:DC:RANG:AUTO OFF")
+
+            self.write(f":SENS:VOLT:DC:NPLC {self.nplc}")
+            self.write(":SENS:VOLT:DC:REF:STAT OFF")
+            self.write(":SENS:VOLT:DC:AVER:STAT OFF")
+
+    def configure_current_measurement(
+        self,
+        nplc=None,
+        current_range=None,
+        autorange=None,
+        mode=None,
+        shunt_resistance_ohms=None,
+    ):
+        """
+        Runtime reconfiguration hook (role API). Order matters: `mode` is
+        applied first (it resets the active function's range/NPLC/filter
+        from the current `self.*` values), then the other settings are
+        layered on top if they were also given a value this call.
+        """
+        if shunt_resistance_ohms is not None:
+            self.shunt_resistance_ohms = float(shunt_resistance_ohms)
+        if mode is not None:
+            self.set_mode(mode)
         if nplc is not None:
             self.set_nplc(nplc)
         if autorange is not None:
@@ -282,14 +367,33 @@ class Keithley2000(CurrentMeter):
     # =========================================================
 
     def read_current(self):
-        """Take one current measurement, in amperes."""
+        """
+        Take one measurement, in amperes.
+
+        In "voltage_shunt" mode, the instrument is actually reading a
+        voltage (see set_mode()) -- converted here to an equivalent
+        current via shunt_resistance_ohms before it's returned, so every
+        caller above this driver (the measurement engine, saved-file
+        columns, calibration math, ...) keeps working in amperes exactly
+        as before, unaware of how that current was actually sensed.
+        """
 
         response = self.query(":READ?")
 
         try:
-            return float(response)
+            raw = float(response)
         except ValueError as exc:
-            raise RuntimeError(f"Invalid current response: {response!r}") from exc
+            raise RuntimeError(f"Invalid reading response: {response!r}") from exc
+
+        if self.mode == self.MODE_VOLTAGE_SHUNT:
+            if not self.shunt_resistance_ohms:
+                raise RuntimeError(
+                    "Keithley 2000 is in voltage_shunt mode but "
+                    "shunt_resistance_ohms is not set."
+                )
+            return raw / self.shunt_resistance_ohms
+
+        return raw
 
     def read_current_average(self, samples=3):
         """Take several readings and return their mean, in amperes."""
@@ -341,14 +445,24 @@ class Keithley2000(CurrentMeter):
         return self.query("*IDN?")
 
     def get_configuration(self):
-        """Return important measurement settings."""
+        """
+        Return important measurement settings. Range/autorange/NPLC are
+        queried from whichever SCPI subsystem is actually active (mode)
+        -- CURR:DC and VOLT:DC each store their own settings independently
+        on the instrument, so querying the wrong one would silently
+        report stale/irrelevant values.
+        """
+
+        subsystem = "VOLT" if self.mode == self.MODE_VOLTAGE_SHUNT else "CURR"
 
         return {
             "interface": self.interface,
             "function": self.query(":SENS:FUNC?"),
-            "range_A": float(self.query(":SENS:CURR:DC:RANG?")),
-            "autorange": bool(int(float(self.query(":SENS:CURR:DC:RANG:AUTO?")))),
-            "nplc": float(self.query(":SENS:CURR:DC:NPLC?")),
+            "mode": self.mode,
+            "range": float(self.query(f":SENS:{subsystem}:DC:RANG?")),
+            "autorange": bool(int(float(self.query(f":SENS:{subsystem}:DC:RANG:AUTO?")))),
+            "nplc": float(self.query(f":SENS:{subsystem}:DC:NPLC?")),
+            "shunt_resistance_ohms": self.shunt_resistance_ohms,
         }
 
     # =========================================================
