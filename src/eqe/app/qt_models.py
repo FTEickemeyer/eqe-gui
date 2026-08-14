@@ -16,7 +16,7 @@ from eqe.core.models import (
 MODE_LABELS = {
     STANDARD_EQE: "Standard EQE",
     BIASED_EQE: "Biased EQE",
-    STANDARD_LIVE_EQE: "Standard Live EQE",
+    STANDARD_LIVE_EQE: "Live EQE",
 
     LOCKIN_EQE_BG: "Lock-in EQE (with optional background)",
     LOCKIN_LIVE_EQE: "Lock-in Live EQE",

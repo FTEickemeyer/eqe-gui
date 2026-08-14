@@ -62,6 +62,7 @@ class SessionPanel(QWidget):
         layout.addWidget(self.user_edit)
 
         self.user_edit.textChanged.connect(self.user_changed.emit)
+        self.user_edit.textChanged.connect(self._update_simulation_visibility)
 
         # --------------------------------------------------
         # Measurement mode selector
@@ -96,6 +97,11 @@ class SessionPanel(QWidget):
 
         layout.addWidget(self.sim_profile_combo)
 
+        # Simulation controls are for development use only -- hidden
+        # unless the user field identifies the developer, so they don't
+        # show up (or get accidentally toggled) in normal lab use.
+        self._update_simulation_visibility(self.user_edit.text())
+
         # --------------------------------------------------
         # Run control buttons
         # --------------------------------------------------
@@ -109,6 +115,9 @@ class SessionPanel(QWidget):
         self.save_button = QPushButton("Save")
         layout.addWidget(self.save_button)
 
+        self.autosave_checkbox = QCheckBox("Autosave")
+        layout.addWidget(self.autosave_checkbox)
+
         # Connect signals
         self.start_button.clicked.connect(self.start_clicked.emit)
         self.stop_button.clicked.connect(self.stop_clicked.emit)
@@ -116,6 +125,17 @@ class SessionPanel(QWidget):
 
         # Push widgets to the left
         layout.addStretch()
+
+    # Users for whom the simulation controls are shown (development use
+    # only). Case-insensitive.
+    _SIMULATION_VISIBLE_USERS = {"felix"}
+
+    def _update_simulation_visibility(self, user_text):
+        visible = user_text.strip().lower() in self._SIMULATION_VISIBLE_USERS
+        self.sim_checkbox.setVisible(visible)
+        self.sim_profile_combo.setVisible(visible)
+        if not visible:
+            self.sim_checkbox.setChecked(False)
 
     def _emit_mode(self):
         """
@@ -138,3 +158,10 @@ class SessionPanel(QWidget):
         """
 
         return self.user_edit.text()
+
+    def get_autosave(self):
+        """
+        Return whether autosave is enabled.
+        """
+
+        return self.autosave_checkbox.isChecked()

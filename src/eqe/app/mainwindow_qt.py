@@ -65,7 +65,7 @@ class MainWindow(QMainWindow):
     point_acquired_signal = Signal(float, float, float)
 
     # Signal used to update the live numeric panel safely in the GUI thread
-    live_numeric_signal = Signal(float, float, float)
+    live_numeric_signal = Signal(float, float, float, float)
 
     # Generic dispatch signal: marshals an arbitrary measurement callback
     # (with its args/kwargs) from the worker thread onto the GUI thread via
@@ -177,7 +177,7 @@ class MainWindow(QMainWindow):
                 show_raw=False,
                 save_raw=False,
                 stop_when_zero=False,
-                autosave=False,
+                autosave=self.session_panel.get_autosave(),
             )
 
             params.mode = self.session_panel.get_mode()
@@ -255,10 +255,16 @@ class MainWindow(QMainWindow):
 
     def _on_save(self):
         """
-        Save the last completed measurement manually.
+        Save the last completed measurement manually (Save button).
+        """
+        self._save_last_result()
+
+    def _save_last_result(self):
+        """
+        Save the last completed measurement. Shared by the manual Save
+        button and autosave-on-completion (see on_measurement_done()).
         """
 
-        # Manual save only makes sense after a successful measurement
         if self._last_result_df is None:
             self.log_panel.append("No completed measurement available to save.")
             return
@@ -428,6 +434,7 @@ class MainWindow(QMainWindow):
             float(eqe),
             float(cell_current),
             float(ref_current),
+            float(integrated_current) if integrated_current is not None else 0.0,
         )
 
         # Forward the plot update safely to the GUI thread
@@ -483,7 +490,7 @@ class MainWindow(QMainWindow):
         )
 
 
-    def _handle_live_numeric_gui(self, eqe, cell_current, ref_current):
+    def _handle_live_numeric_gui(self, eqe, cell_current, ref_current, integrated_current):
         """
         Update the live numeric panel in the GUI thread.
         """
@@ -492,6 +499,7 @@ class MainWindow(QMainWindow):
             float(eqe),
             float(cell_current),
             float(ref_current),
+            float(integrated_current),
         )
 
 
@@ -526,6 +534,9 @@ class MainWindow(QMainWindow):
         self._last_result_df = df_result
 
         self.log_panel.append("Measurement done")
+
+        if self.session_panel.get_autosave():
+            self._save_last_result()
 
 
     def on_measurement_error(self, exc):

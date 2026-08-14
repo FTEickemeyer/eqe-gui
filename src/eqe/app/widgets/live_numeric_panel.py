@@ -7,10 +7,10 @@ Initial values displayed:
 - EQE (%)
 - test cell current
 - reference cell current
+- integrated current
 
 Later extensions:
 - wavelength
-- integrated current
 - lock-in amplitude/phase
 """
 
@@ -57,7 +57,17 @@ class LiveNumericPanel(QWidget):
         self.ref_current_label = QLabel("0 A")
         layout.addRow("Reference current", self.ref_current_label)
 
-    def update_values(self, eqe, cell_current, ref_current):
+        # -----------------------------
+        # Integrated current
+        # -----------------------------
+        # Only meaningful during a wavelength scan (integrated over the
+        # spectrum measured so far); always 0 during live monitoring at a
+        # fixed wavelength, since there's no spectrum to integrate over.
+
+        self.integrated_current_label = QLabel("0.00 mA/cm²")
+        layout.addRow("Integrated current", self.integrated_current_label)
+
+    def update_values(self, eqe, cell_current, ref_current, integrated_current=0.0):
         """
         Update displayed measurement values.
         """
@@ -65,3 +75,4 @@ class LiveNumericPanel(QWidget):
         self.eqe_label.setText(f"{eqe:.3f} %")
         self.cell_current_label.setText(f"{cell_current:.3e} A")
         self.ref_current_label.setText(f"{ref_current:.3e} A")
+        self.integrated_current_label.setText(f"{integrated_current:.3f} mA/cm²")
