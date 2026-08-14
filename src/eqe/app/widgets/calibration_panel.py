@@ -20,12 +20,17 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QLabel,
 )
+from PySide6.QtCore import Signal
 
 
 class CalibrationPanel(QWidget):
     """
     Panel controlling whether a scan is a calibration measurement.
     """
+
+    # Emitted when the checkbox is toggled, so MainWindow can react (e.g.
+    # pre-fill the sample name with the reference cell's identifier).
+    calibration_measurement_toggled = Signal(bool)
 
     def __init__(self):
         super().__init__()
@@ -43,6 +48,10 @@ class CalibrationPanel(QWidget):
 
         self.calibration_measurement_checkbox = QCheckBox("Calibration measurement")
         layout.addRow(self.calibration_measurement_checkbox)
+
+        self.calibration_measurement_checkbox.toggled.connect(
+            self.calibration_measurement_toggled.emit
+        )
 
         hint = QLabel(
             "Check with the reference cell installed instead of the sample.\n"

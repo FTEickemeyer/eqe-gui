@@ -208,8 +208,8 @@ def perform_measurement(
 
                 if show_raw_signal:
                     emit_live_update(
-                        f"nm = {nm} nm - signal ref. cell (chA) = {intSi71889_current:.2e} A "
-                        f"- signal test cell (chB) = {cell_current:.2e} A"
+                        f"nm = {nm} nm - signal ref. cell = {intSi71889_current:.2e} A "
+                        f"- signal test cell = {cell_current:.2e} A"
                     )
 
                 if show_IPCE:

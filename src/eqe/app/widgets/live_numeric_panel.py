@@ -79,6 +79,18 @@ class LiveNumericPanel(QWidget):
         if label is not None:
             label.setVisible(visible)
 
+    def set_eqe_visible(self, visible: bool):
+        """
+        Show or hide the EQE row (hidden during a calibration measurement,
+        where EQE isn't computed -- only raw cell/reference currents are).
+        """
+
+        layout = self.layout()
+        self.eqe_label.setVisible(visible)
+        label = layout.labelForField(self.eqe_label)
+        if label is not None:
+            label.setVisible(visible)
+
     def update_values(self, eqe, cell_current, ref_current, integrated_current=0.0):
         """
         Update displayed measurement values.

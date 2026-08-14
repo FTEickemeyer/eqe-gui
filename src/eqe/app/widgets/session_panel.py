@@ -135,11 +135,11 @@ class SessionPanel(QWidget):
     # user field identifies a developer (see _DEVELOPER_USERS).
     _UNIMPLEMENTED_MODES = {LOCKIN_EQE_BG, LOCKIN_LIVE_EQE}
 
-    def _is_developer_user(self):
+    def is_developer_user(self):
         return self.user_edit.text().strip().lower() in self._DEVELOPER_USERS
 
     def _update_simulation_visibility(self, user_text=None):
-        visible = self._is_developer_user()
+        visible = self.is_developer_user()
         self.sim_checkbox.setVisible(visible)
         self.sim_profile_combo.setVisible(visible)
         if not visible:
@@ -154,7 +154,7 @@ class SessionPanel(QWidget):
         """
 
         previous_mode = self.mode_combo.currentData() if self.mode_combo.count() else None
-        include_unimplemented = self._is_developer_user()
+        include_unimplemented = self.is_developer_user()
 
         self.mode_combo.blockSignals(True)
         self.mode_combo.clear()

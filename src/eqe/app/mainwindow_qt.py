@@ -70,6 +70,10 @@ class MainWindow(QMainWindow):
     # Signal used to update the live numeric panel safely in the GUI thread
     live_numeric_signal = Signal(float, float, float, float)
 
+    # Signal used to forward a calibration-measurement point (wavelength,
+    # reference current, cell current -- no EQE) safely to the GUI thread
+    calibration_point_signal = Signal(float, float, float)
+
     # Generic dispatch signal: marshals an arbitrary measurement callback
     # (with its args/kwargs) from the worker thread onto the GUI thread via
     # Qt's queued cross-thread delivery. Passed to the controller as
@@ -94,6 +98,7 @@ class MainWindow(QMainWindow):
         # Connect worker-thread point updates to a GUI-thread slot
         self.point_acquired_signal.connect(self._handle_point_acquired_gui)
         self.live_numeric_signal.connect(self._handle_live_numeric_gui)
+        self.calibration_point_signal.connect(self._handle_calibration_point_gui)
         self._dispatch_signal.connect(self._run_on_gui_thread, Qt.QueuedConnection)
 
         # --------------------------------------------------
@@ -130,6 +135,9 @@ class MainWindow(QMainWindow):
         self._wavelengths = []
         self._eqe_values = []
         self._current_values = []
+        # storage for calibration-measurement data (raw currents, no EQE)
+        self._calib_ref_currents = []
+        self._calib_cell_currents = []
 
         # Last completed measurement dataframe, used by manual Save
         self._last_result_df = None
@@ -148,6 +156,38 @@ class MainWindow(QMainWindow):
             self.controller.set_live_wavelength
         )
 
+        # Calibration measurements are a developer-only feature for now --
+        # hidden (and unchecked, so a stale checked state can't linger)
+        # unless the User field identifies a developer, same gating as
+        # Simulation and the Lock-in modes.
+        self.session_panel.user_changed.connect(self._update_calibration_visibility)
+        self._update_calibration_visibility(self.session_panel.get_user())
+
+        # Pre-fill the sample name with the reference cell's identifier
+        # when starting a calibration measurement.
+        self.calibration_panel.calibration_measurement_toggled.connect(
+            self._on_calibration_toggled
+        )
+
+
+    def _update_calibration_visibility(self, user_text=None):
+        """
+        Re-run the mode-based visibility rules on a user-field change,
+        since the Calibration / Saving panel's visibility depends on both
+        mode and developer-user status (see update_mode_visibility()) and
+        must stay correct regardless of which one just changed.
+        """
+
+        self.update_mode_visibility(self.session_panel.get_mode())
+
+    def _on_calibration_toggled(self, checked):
+        """
+        Pre-fill the sample name with the reference cell's identifier
+        when "Calibration measurement" is checked.
+        """
+
+        if checked:
+            self.metadata_panel.sample_name_edit.setText("Si71889")
 
     def _on_mode_changed(self, mode):
         """
@@ -199,13 +239,15 @@ class MainWindow(QMainWindow):
                 wl_stop = int(self.scan_panel.stop_nm_spin.value())
                 interval = int(self.scan_panel.step_nm_spin.value())
 
-            # Calibration measurement is a scan-only concept (records raw
-            # currents to produce a new incident-beam calibration file);
-            # the checkbox is hidden for live modes (SECTION_CALIBRATION),
-            # but its state isn't reset on mode switch, so ignore it
-            # explicitly here too rather than relying on that alone.
+            # Calibration measurement is a scan-only, developer-only
+            # concept (records raw currents to produce a new incident-beam
+            # calibration file); the checkbox is hidden for live modes
+            # (SECTION_CALIBRATION) and for non-developer users, but its
+            # state isn't reset on mode switch, so ignore it explicitly
+            # here too rather than relying on visibility alone.
             is_calibration = (
                 not is_live
+                and self.session_panel.is_developer_user()
                 and self.calibration_panel.get_values()["calibration_measurement"]
             )
 
@@ -227,7 +269,8 @@ class MainWindow(QMainWindow):
 
             params.mode = mode
             self._active_mode = mode
-            self._configure_plots_for_mode(self._active_mode)
+            self._active_calibration_measurement = is_calibration
+            self._configure_plots_for_mode(self._active_mode, is_calibration=is_calibration)
 
             # Reset plots for a new measurement
             self._reset_plots()
@@ -495,15 +538,19 @@ class MainWindow(QMainWindow):
             )
             return
 
+        cell_current = kwargs.get("cell_current", 0.0) if kwargs else 0.0
+        ref_current = kwargs.get("ref_current", 0.0) if kwargs else 0.0
+
         if eqe is None:
             # Expected during a calibration measurement: EQE isn't
-            # computed (only raw currents are recorded), so there's
-            # nothing to plot/readout for this point -- not an error.
+            # computed, only raw currents -- plot/readout those instead
+            # (see _handle_calibration_point_gui()).
+            self.calibration_point_signal.emit(
+                float(wavelength), float(ref_current), float(cell_current)
+            )
             return
 
         # Forward numeric update safely to the GUI thread
-        cell_current = kwargs.get("cell_current", 0.0) if kwargs else 0.0
-        ref_current = kwargs.get("ref_current", 0.0) if kwargs else 0.0
         time_s = kwargs.get("time_s", None) if kwargs else None
         fixed_wavelength_nm = kwargs.get("fixed_wavelength_nm", None) if kwargs else None
 
@@ -579,6 +626,31 @@ class MainWindow(QMainWindow):
             float(integrated_current),
         )
 
+    def _handle_calibration_point_gui(self, wavelength, ref_current, cell_current):
+        """
+        Handle a calibration-measurement point in the GUI thread: no EQE
+        is computed, so plot/readout the raw reference/cell currents
+        instead (see on_point_acquired() and _configure_plots_for_mode()).
+        """
+
+        self._wavelengths.append(float(wavelength))
+        self._calib_ref_currents.append(float(ref_current))
+        self._calib_cell_currents.append(float(cell_current))
+
+        # "Live currents": reference current on the left axis, test-cell
+        # current on the right -- same widget/axes as EQE/integrated
+        # current, just different content for a calibration measurement.
+        self.eqe_plot_widget.update_curves(
+            self._wavelengths,
+            self._calib_ref_currents,
+            self._calib_cell_currents,
+        )
+
+        # EQE/integrated-current rows are hidden for a calibration
+        # measurement (see _configure_plots_for_mode()); pass 0.0
+        # placeholders for them.
+        self.live_numeric_panel.update_values(0.0, cell_current, ref_current, 0.0)
+
 
     def _reset_plots(self):
         """
@@ -589,6 +661,8 @@ class MainWindow(QMainWindow):
         self._wavelengths = []
         self._eqe_values = []
         self._current_values = []
+        self._calib_ref_currents = []
+        self._calib_cell_currents = []
 
         # reset plot
         self.eqe_plot_widget.update_curves([], [], [])
@@ -650,6 +724,17 @@ class MainWindow(QMainWindow):
 
             # Show or hide the widget
             widget.setVisible(visible)
+
+        # Calibration measurements are developer-only (see
+        # _update_calibration_visibility()), on top of the mode-based
+        # SECTION_CALIBRATION rule above -- combine both constraints here
+        # rather than in two independent places, since this method is
+        # re-run on both a mode change and a user-field change and must
+        # give the same answer either way.
+        is_dev = self.session_panel.is_developer_user()
+        self.calibration_group.setVisible(sections.get(SECTION_CALIBRATION, False) and is_dev)
+        if not is_dev:
+            self.calibration_panel.calibration_measurement_checkbox.setChecked(False)
 
         # Integrated current is only meaningful over a wavelength sweep;
         # it's structurally always 0 during live monitoring at a single
@@ -860,21 +945,37 @@ class MainWindow(QMainWindow):
 
         event.accept()
 
-    def _configure_plots_for_mode(self, mode):
+    def _configure_plots_for_mode(self, mode, is_calibration=False):
         """
-        Configure plot labels according to the selected measurement mode.
+        Configure plot labels and Live Readout row visibility according
+        to the selected measurement mode (and, for scan modes, whether
+        it's a calibration measurement).
         """
 
-        if mode in LIVE_MODES:
+        if is_calibration:
+            # No EQE is computed for a calibration measurement -- show
+            # the raw reference/test-cell currents instead.
+            self.eqe_plot_widget.ax.set_xlabel("Wavelength (nm)")
+            self.eqe_plot_widget.ax.set_ylabel("Reference cell current (A)")
+            self.eqe_plot_widget.ax2.set_ylabel("Test cell current (A)")
+            self.eqe_plot_widget.ax.set_title("Live currents")
+            self.live_numeric_panel.set_eqe_visible(False)
+            self.live_numeric_panel.set_integrated_current_visible(False)
+
+        elif mode in LIVE_MODES:
             self.eqe_plot_widget.ax.set_xlabel("Time (s)")
             self.eqe_plot_widget.ax.set_ylabel("EQE (%)")
             self.eqe_plot_widget.ax2.set_ylabel("Cell current (A)")
             self.eqe_plot_widget.ax.set_title("Live EQE / Cell Current vs Time")
+            self.live_numeric_panel.set_eqe_visible(True)
+            self.live_numeric_panel.set_integrated_current_visible(False)
 
         else:
             self.eqe_plot_widget.ax.set_xlabel("Wavelength (nm)")
             self.eqe_plot_widget.ax.set_ylabel("EQE (%)")
             self.eqe_plot_widget.ax2.set_ylabel("Integrated current (mA/cm²)")
             self.eqe_plot_widget.ax.set_title("EQE Spectrum / Integrated Current")
+            self.live_numeric_panel.set_eqe_visible(True)
+            self.live_numeric_panel.set_integrated_current_visible(True)
 
         self.eqe_plot_widget.canvas.draw_idle()
