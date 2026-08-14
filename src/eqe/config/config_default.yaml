@@ -32,7 +32,23 @@ instruments:
           type: serial
           port: COM10
           baudrate: 9600
-        nplc: 1.0
+        # NPLC=5 (was 1): this Keithley 2000's DC current function only has
+        # one range (0.01 A / 10 mA -- confirmed on real hardware, it
+        # clamps any smaller requested range back to this), which is far
+        # larger than the reference cell's actual signal (~10s of nA to a
+        # few uA), especially at the weaker ends of a wavelength sweep. On
+        # real hardware, raising NPLC from 1 to 5 measured ~5x lower
+        # relative noise at a weak-signal point (350 nm: 2.4% -> 0.5%);
+        # NPLC=10 measured no further improvement for ~2x the time, so 5 is
+        # the better trade-off. Investigated 2026-08-14 after a noisy
+        # Si71889 calibration measurement.
+        nplc: 5.0
+        # Autorange: harmless and correct in general, even though it made
+        # no difference on this specific instrument (see above) -- keeps
+        # working correctly if the reference meter is ever swapped for a
+        # model with more current ranges. current_range is only used as a
+        # fixed range if autorange is set to false.
+        autorange: true
         current_range: 0.01
         samples: 1
 

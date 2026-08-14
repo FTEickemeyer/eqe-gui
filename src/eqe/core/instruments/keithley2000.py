@@ -67,12 +67,37 @@ class Keithley2000(CurrentMeter):
     gpib_resource : str
         VISA resource string for GPIB.
     nplc : float
-        Integration time in power-line cycles. Default: 1.0 (tested value).
+        Integration time in power-line cycles. Default: 5.0. Was 1.0, raised
+        after a noisy Si71889 calibration measurement investigated
+        2026-08-14: this instrument's DC current function only has one
+        range (see `current_range`), far larger than the reference cell's
+        actual signal, so the reading sits close to the noise floor at
+        the weaker-signal wavelengths of a sweep -- longer integration
+        (higher NPLC) directly reduces that. On real hardware at a
+        weak-signal point (350 nm), NPLC 1->5 cut relative noise from
+        ~2.4% to ~0.5%; NPLC=10 measured no further improvement for ~2x
+        the time, so 5 is the better trade-off.
+    autorange : bool
+        Autorange the DC-current measurement. Default: True. Harmless and
+        correct in general (matches what the Keithley 2400 test-cell meter
+        already does), but on this specific instrument it makes no
+        difference: confirmed on real hardware that its DC current
+        function only has one range (0.01 A) -- any smaller range request
+        is silently clamped back to it. The actual noise fix is `nplc`
+        above; kept here for correctness if this meter is ever swapped for
+        a model with more current ranges.
     current_range : float
-        Fixed DC-current range in amperes. Default: 0.01 (tested value).
+        Fixed DC-current range in amperes, used only when `autorange` is
+        False. Default: 0.01 -- also this instrument's only available DC
+        current range (see `autorange` above), so changing this value has
+        no effect on real hardware; kept for API completeness/other
+        instrument models.
     samples : int
         Number of readings averaged per `measure_current()` call. Default: 1
-        (matches the tested notebook, which reads `:READ?` directly).
+        (matches the tested notebook, which reads `:READ?` directly). Raising
+        `nplc` was measured to reduce noise more efficiently than raising
+        this, since each extra sample here costs a full extra serial
+        round-trip on top of its integration time.
     timeout : float
         Communication timeout in seconds.
     """
@@ -83,7 +108,8 @@ class Keithley2000(CurrentMeter):
         port="COM10",
         baudrate=9600,
         gpib_resource="GPIB1::16::INSTR",
-        nplc=1.0,
+        nplc=5.0,
+        autorange=True,
         current_range=0.01,
         samples=1,
         timeout=2.0,
@@ -98,6 +124,7 @@ class Keithley2000(CurrentMeter):
         self.gpib_resource = gpib_resource
 
         self.nplc = nplc
+        self.autorange = autorange
         self.current_range = current_range
         self.samples = samples
         self.timeout = timeout
@@ -221,11 +248,14 @@ class Keithley2000(CurrentMeter):
         # DC current function
         self.write(":SENS:FUNC 'CURR:DC'")
 
-        # Fixed current range
-        self.write(f":SENS:CURR:DC:RANG {self.current_range}")
-
-        # Disable autoranging
-        self.write(":SENS:CURR:DC:RANG:AUTO OFF")
+        # Range: autorange by default (see class docstring) so the reading
+        # keeps good resolution across the reference cell's full dynamic
+        # range; a fixed range is only used if autorange is explicitly off.
+        if self.autorange:
+            self.write(":SENS:CURR:DC:RANG:AUTO ON")
+        else:
+            self.write(f":SENS:CURR:DC:RANG {self.current_range}")
+            self.write(":SENS:CURR:DC:RANG:AUTO OFF")
 
         # Integration time
         self.write(f":SENS:CURR:DC:NPLC {self.nplc}")
@@ -238,11 +268,13 @@ class Keithley2000(CurrentMeter):
 
         time.sleep(0.2)
 
-    def configure_current_measurement(self, nplc=None, current_range=None):
+    def configure_current_measurement(self, nplc=None, current_range=None, autorange=None):
         """Runtime reconfiguration hook (role API)."""
         if nplc is not None:
             self.set_nplc(nplc)
-        if current_range is not None:
+        if autorange is not None:
+            self.set_autorange(autorange)
+        elif current_range is not None:
             self.set_current_range(current_range)
 
     # =========================================================
@@ -283,11 +315,22 @@ class Keithley2000(CurrentMeter):
         self.write(f":SENS:CURR:DC:NPLC {self.nplc}")
 
     def set_current_range(self, current_range):
-        """Set fixed DC-current range in amperes."""
+        """Set a fixed DC-current range in amperes (disables autorange)."""
 
+        self.autorange = False
         self.current_range = float(current_range)
         self.write(f":SENS:CURR:DC:RANG {self.current_range}")
         self.write(":SENS:CURR:DC:RANG:AUTO OFF")
+
+    def set_autorange(self, enabled):
+        """Enable/disable DC-current autoranging (see class docstring)."""
+
+        self.autorange = bool(enabled)
+        if self.autorange:
+            self.write(":SENS:CURR:DC:RANG:AUTO ON")
+        else:
+            self.write(f":SENS:CURR:DC:RANG {self.current_range}")
+            self.write(":SENS:CURR:DC:RANG:AUTO OFF")
 
     # =========================================================
     # Diagnostics

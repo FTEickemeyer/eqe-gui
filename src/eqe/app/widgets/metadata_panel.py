@@ -71,6 +71,7 @@ class MetadataPanel(QWidget):
         self.cell_area_spin.setRange(0.0, 1000.0)
         self.cell_area_spin.setDecimals(4)
         self.cell_area_spin.setSingleStep(0.01)
+        self.cell_area_spin.setValue(1.0)
 
         # Show a unit suffix directly in the widget
         self.cell_area_spin.setSuffix(" cm²")

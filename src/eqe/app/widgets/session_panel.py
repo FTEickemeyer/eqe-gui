@@ -117,6 +117,7 @@ class SessionPanel(QWidget):
         layout.addWidget(self.save_button)
 
         self.autosave_checkbox = QCheckBox("Autosave")
+        self.autosave_checkbox.setChecked(True)
         layout.addWidget(self.autosave_checkbox)
 
         # Connect signals
