@@ -1,0 +1,28 @@
+# Example config_local.yaml.
+#
+# This file is entirely optional -- config_default.yaml's paths already
+# use "~" (your own home directory), and its instrument ports already
+# match this lab's hardware, so a fresh install on a new Windows account
+# on the *same* physical measurement PC typically needs no config_local.yaml
+# at all. Create one only if you want to override something, e.g.:
+#
+# - share calibration files across colleagues' accounts instead of each
+#   account keeping its own (see calibrations_dir below);
+# - pin a specific incident-beam calibration file instead of always using
+#   the latest one produced (see README's "Calibration" section);
+# - point at different instrument ports, if this is a different PC.
+#
+# Recommended location: ~/.eqe/config_local.yaml (i.e.
+# C:\Users\<you>\.eqe\config_local.yaml) -- this is picked up regardless
+# of how the package was installed. See README's "Configuration" section.
+
+paths:
+  # Example: point every colleague's account at the same shared
+  # calibrations folder instead of each having their own.
+  calibrations_dir: C:/Users/Public/Documents/EQE/calibrations
+
+calibration:
+  # Leave unset (null, the default) to always use the most recently
+  # produced incbeamcurr_*.csv in calibrations_dir automatically. Set it
+  # to a specific filename only to pin a particular calibration instead.
+  active_incident_beam_file: null

@@ -1,0 +1,84 @@
+paths:
+  measurements_dir: ~/Documents/EQE/measurements
+  calibrations_dir: ~/Documents/EQE/calibrations
+  logs_dir: ~/AppData/Local/eqe/logs
+
+calibration:
+  reference_cell_file: 71889_L_IPCE_NIST.csv
+  active_incident_beam_file: null
+  grating_change_nm: 850
+
+# Hardware configuration.
+#
+# `active_profile` selects one entry from `profiles` below; that profile is
+# translated into the logical reference_meter/test_meter/monochromator
+# roles the measurement engine uses (see core/instruments/factory.py).
+# Switching hardware setups (e.g. back to the Keithley 2600) means changing
+# `active_profile` here -- no code changes needed.
+instruments:
+  mono_port: "COM2"
+
+  active_profile: keithley2000_2400
+
+  profiles:
+    # Current replacement hardware: the Keithley 2600 is out of service.
+    # Reference signal -> Keithley 2000, test-cell signal + bias -> Keithley 2400.
+    # Connection settings below match the tested drivers/notebooks in
+    # C:\Users\dreickem\Documents\code\test.
+    keithley2000_2400:
+      reference_meter:
+        driver: keithley2000
+        connection:
+          type: serial
+          port: COM10
+          baudrate: 9600
+        nplc: 1.0
+        current_range: 0.01
+        samples: 1
+
+      test_meter:
+        driver: keithley2400
+        connection:
+          type: serial
+          resource: "ASRL8::INSTR"
+          baud_rate: 9600
+        nplc: 1.0
+        samples: 3
+        current_compliance: 0.01
+        ramp_steps: 10
+        ramp_delay_s: 0.05
+        discard_first_reading: true
+        # Match the Keithley 2600 path's near-compliance warning threshold
+        # (smu.py hardcodes 0.95 -- protected/untouched). The 2400 driver
+        # defaults to 0.98 standalone; overridden here so a scan reports a
+        # compliance warning at the same margin regardless of which
+        # hardware profile is active.
+        compliance_fraction: 0.95
+        # The connection is kept open across scans (no reconnect between
+        # measurements). If a new scan starts at a much smaller current
+        # than the previous one ended at, current autorange can take
+        # several range steps to settle on the first (discarded) reading
+        # -- longer than the driver's standalone 5 s default comfortably
+        # covers. Give it more headroom here.
+        timeout_ms: 15000
+
+    # Original hardware: one Keithley 2600, channel A = reference,
+    # channel B = test cell + bias. Both roles share a single VISA session.
+    keithley2600:
+      resource: "GPIB1::24::INSTR"
+      N: 500
+      nplc: 0.01
+      interval: 0.002
+
+      reference_meter:
+        driver: keithley2600
+        channel: A
+
+      test_meter:
+        driver: keithley2600
+        channel: B
+
+measurement:
+  N: 500
+  nplc: 0.01
+  interval: 0.002

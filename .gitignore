@@ -6,6 +6,11 @@ __pycache__/
 *.pkl
 *.log
 
+# Build artifacts (python -m build, pip install .)
+build/
+dist/
+*.egg-info/
+
 # Virtual environments
 .venv/
 venv/
@@ -23,10 +28,13 @@ Thumbs.db
 data/
 output/
 results/
-*.csv
-*.txt
-*.dat
 
 # If you use these
 *.png
 *.pdf
+
+# Ignore the local config
+src/eqe/config/config_local.yaml
+
+# Personal scratch notes
+info.txt
