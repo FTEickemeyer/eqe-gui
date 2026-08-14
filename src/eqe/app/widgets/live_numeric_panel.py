@@ -67,6 +67,18 @@ class LiveNumericPanel(QWidget):
         self.integrated_current_label = QLabel("0.00 mA/cm²")
         layout.addRow("Integrated current", self.integrated_current_label)
 
+    def set_integrated_current_visible(self, visible: bool):
+        """
+        Show or hide the integrated-current row (hidden during live
+        monitoring at a fixed wavelength, where it's structurally 0).
+        """
+
+        layout = self.layout()
+        self.integrated_current_label.setVisible(visible)
+        label = layout.labelForField(self.integrated_current_label)
+        if label is not None:
+            label.setVisible(visible)
+
     def update_values(self, eqe, cell_current, ref_current, integrated_current=0.0):
         """
         Update displayed measurement values.

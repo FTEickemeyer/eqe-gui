@@ -26,6 +26,7 @@ MODE_LABELS = {
 
 SECTION_METADATA = "metadata"
 SECTION_SCAN = "scan"
+SECTION_WAVELENGTH = "wavelength"
 SECTION_BIAS = "bias"
 SECTION_MODULATION = "modulation"
 SECTION_BACKGROUND = "background"
@@ -41,6 +42,7 @@ MODE_SECTIONS = {
     STANDARD_EQE: {
         SECTION_METADATA: True,
         SECTION_SCAN: True,
+        SECTION_WAVELENGTH: False,
         SECTION_BIAS: False,
         SECTION_MODULATION: False,
         SECTION_BACKGROUND: False,
@@ -52,6 +54,7 @@ MODE_SECTIONS = {
     BIASED_EQE: {
         SECTION_METADATA: True,
         SECTION_SCAN: True,
+        SECTION_WAVELENGTH: False,
         SECTION_BIAS: True,
         SECTION_MODULATION: False,
         SECTION_BACKGROUND: False,
@@ -62,7 +65,8 @@ MODE_SECTIONS = {
 
     STANDARD_LIVE_EQE: {
         SECTION_METADATA: True,
-        SECTION_SCAN: True,
+        SECTION_SCAN: False,
+        SECTION_WAVELENGTH: True,
         SECTION_BIAS: True,
         SECTION_MODULATION: False,
         SECTION_BACKGROUND: False,
@@ -74,6 +78,7 @@ MODE_SECTIONS = {
     LOCKIN_EQE_BG: {
         SECTION_METADATA: True,
         SECTION_SCAN: True,
+        SECTION_WAVELENGTH: False,
         SECTION_BIAS: False,
         SECTION_MODULATION: True,
         SECTION_BACKGROUND: True,
@@ -84,7 +89,8 @@ MODE_SECTIONS = {
 
     LOCKIN_LIVE_EQE: {
         SECTION_METADATA: True,
-        SECTION_SCAN: True,
+        SECTION_SCAN: False,
+        SECTION_WAVELENGTH: True,
         SECTION_BIAS: True,
         SECTION_MODULATION: False,
         SECTION_BACKGROUND: False,

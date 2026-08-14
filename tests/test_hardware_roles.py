@@ -24,7 +24,7 @@ from eqe.core.instruments.dual_channel import (
     DualChannelReferenceMeter,
     DualChannelTestMeter,
 )
-from eqe.core.measurement_engine import perform_measurement
+from eqe.core.measurement_engine import perform_measurement, perform_live_monitoring
 
 
 # ---------------------------------------------------------------------
@@ -444,6 +444,86 @@ class BuildHardwareTests(unittest.TestCase):
         # Both roles must share the same underlying SMU connection.
         self.assertIs(hardware.reference_meter._session, hardware.test_meter._session)
         self.assertIs(hardware.reference_meter._session.smu, fake_smu)
+
+
+class LiveMonitoringWavelengthChangeTests(unittest.TestCase):
+    """
+    Regression coverage for changing the target wavelength while
+    perform_live_monitoring() is running, without stopping/restarting it.
+    """
+
+    def _calibration_df(self, wavelengths):
+        # Distinct ratio per wavelength so a wrong/stale lookup is
+        # detectable, not just coincidentally correct.
+        return pd.DataFrame(
+            {
+                "incident beam current (A)/intSiref current (A)": [
+                    1.0 + 0.1 * i for i in range(len(wavelengths))
+                ]
+            },
+            index=list(wavelengths),
+        )
+
+    def test_wavelength_change_moves_mono_and_updates_calibration(self):
+        mono = FakeMonochromator()
+        reference_meter = FakeCurrentMeter(value=1e-6)
+        test_meter = FakeBiasCurrentMeter(value=2e-6)
+        hardware = MeasurementHardware(
+            reference_meter=reference_meter, test_meter=test_meter, monochromator=mono
+        )
+
+        df_incbeamcurr = self._calibration_df(range(400, 601, 10))
+
+        calls = {"n": 0}
+        targets = iter([550, 550, 600, 600])  # switches to 600 on the 3rd read
+
+        def get_target_wavelength():
+            return next(targets, 600)
+
+        def stop_requested():
+            calls["n"] += 1
+            return calls["n"] > 4
+
+        perform_live_monitoring(
+            hardware,
+            df_incbeamcurr,
+            wavelength_nm=550,
+            stop_requested=stop_requested,
+            update_interval_s=0,
+            get_target_wavelength=get_target_wavelength,
+        )
+
+        # The monochromator must have ended up at the changed-to
+        # wavelength, and the calibration ratio used for the last
+        # readings must be the one for 600 nm, not stale from 550 nm.
+        self.assertEqual(mono.position, 600)
+
+    def test_no_target_wavelength_callback_behaves_as_before(self):
+        """get_target_wavelength=None (the default) must not change behavior."""
+        mono = FakeMonochromator()
+        reference_meter = FakeCurrentMeter(value=1e-6)
+        test_meter = FakeBiasCurrentMeter(value=2e-6)
+        hardware = MeasurementHardware(
+            reference_meter=reference_meter, test_meter=test_meter, monochromator=mono
+        )
+
+        df_incbeamcurr = self._calibration_df([550])
+
+        calls = {"n": 0}
+
+        def stop_requested():
+            calls["n"] += 1
+            return calls["n"] > 2
+
+        perform_live_monitoring(
+            hardware,
+            df_incbeamcurr,
+            wavelength_nm=550,
+            stop_requested=stop_requested,
+            update_interval_s=0,
+        )
+
+        self.assertEqual(mono.position, 550)
 
 
 class SimulatedHardwareBiasTests(unittest.TestCase):

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 # own GUI-only presentation data (labels, section visibility) on top.
 STANDARD_EQE = "standard_eqe"
 BIASED_EQE = "biased_eqe"
-STANDARD_LIVE_EQE = "standard_live_eqe"
+STANDARD_LIVE_EQE = "live_eqe"
 
 LOCKIN_EQE_BG = "lockin_eqe_background"
 LOCKIN_LIVE_EQE = "lockin_live_eqe"

@@ -96,30 +96,6 @@ class ScanPanel(QWidget):
 
         layout.addRow("Direction", self.direction_combo)
 
-        # Stop wavelength / step size / direction only apply to a
-        # wavelength sweep; live modes only use the start wavelength.
-        # Kept as a list so set_range_fields_visible() can show/hide both
-        # the field and its QFormLayout label together.
-        self._range_only_fields = [
-            self.stop_nm_spin,
-            self.step_nm_spin,
-            self.direction_combo,
-        ]
-
-    def set_range_fields_visible(self, visible: bool):
-        """
-        Show or hide the stop/step/direction controls, which only apply
-        to a wavelength sweep. Start wavelength always stays visible
-        since live modes use it as the fixed measurement wavelength.
-        """
-
-        layout = self.layout()
-        for field in self._range_only_fields:
-            field.setVisible(visible)
-            label = layout.labelForField(field)
-            if label is not None:
-                label.setVisible(visible)
-
     def get_values(self):
         """
         Return scan settings as a dictionary.

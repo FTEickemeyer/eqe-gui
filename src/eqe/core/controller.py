@@ -24,6 +24,14 @@ class MeasurementController:
         self._connected_simulate = None
         self._connected_simulate_profile = None
 
+        # Target wavelength for an active live-monitoring run. A plain
+        # float attribute rather than a lock/Event: CPython's GIL makes a
+        # single attribute's get/set atomic, so it's safe to write from
+        # the GUI thread (wavelength panel's valueChanged) and poll from
+        # the measurement worker thread (perform_live_monitoring) without
+        # extra synchronization -- same reasoning as _measurement_running.
+        self._live_target_wavelength = None
+
     @property
     def mono(self):
         """
@@ -95,6 +103,22 @@ class MeasurementController:
     def stop_requested(self):
         return self._stop_event.is_set()
 
+    def set_live_wavelength(self, nm):
+        """
+        Set the target wavelength for an active (or about-to-start) live
+        measurement. Safe to call from the GUI thread while the
+        measurement worker thread is running -- see _live_target_wavelength.
+
+        Truncated to whole nm: the calibration table is interpolated to
+        an integer-nm grid (see analysis/calibration.py), matching the
+        rest of the codebase's convention of treating wavelengths as
+        integer nm despite the GUI spin boxes allowing a decimal.
+        """
+        self._live_target_wavelength = float(int(nm))
+
+    def get_live_wavelength(self):
+        return self._live_target_wavelength
+
     def _emit(self, callback, ui_dispatch, *args, **kwargs):
         if callback is None:
             return
@@ -149,6 +173,7 @@ class MeasurementController:
                         on_point_acquired=lambda **payload: self._emit(
                             callbacks.get("on_point_acquired"), ui_dispatch, **payload
                         ),
+                        get_target_wavelength=self.get_live_wavelength,
                     )
 
                 else:

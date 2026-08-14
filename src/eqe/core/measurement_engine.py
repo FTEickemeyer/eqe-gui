@@ -315,6 +315,7 @@ def perform_live_monitoring(
     stop_requested=None,
     on_point_acquired=None,
     update_interval_s=0.5,
+    get_target_wavelength=None,
 ):
     """
     GUI-agnostic live monitoring loop at one fixed wavelength.
@@ -327,6 +328,14 @@ def perform_live_monitoring(
     GUI's live plot doesn't accumulate points unboundedly fast during a
     long-running session. There is no GUI control for this yet -- see
     CLAUDE.md roadmap item 3 (acquisition settings panel).
+
+    `get_target_wavelength`, if given, is polled once per cycle; when it
+    returns a value different from the wavelength currently being
+    measured, the monochromator moves there (shutter closed during the
+    move, as at startup) and the calibration ratio is looked up again for
+    the new wavelength before measuring continues. Lets the operator
+    change wavelength while live monitoring is running, without having
+    to stop and restart it.
     """
 
     mono = hardware.monochromator
@@ -376,26 +385,46 @@ def perform_live_monitoring(
     else:
         emit_status("Bias disabled")
 
-    # Move monochromator once
-    mono.shutter(True)
-    mono.goto_nm(nm, on_status=emit_status)
-    mono.shutter(False)
+    def move_to(target_nm):
+        mono.shutter(True)
+        mono.goto_nm(target_nm, on_status=emit_status)
+        mono.shutter(False)
 
-    # Same calibration logic as scan mode
-    try:
-        incbeamcurr_div_intSirefcurrent = df_incbeamcurr[
-            "incident beam current (A)/intSiref current (A)"
-        ].loc[nm]
-    except KeyError:
-        raise KeyError(
-            f"No calibration value found at {nm:.0f} nm. "
-            "Use a wavelength present in the calibration table."
-        )
+    def lookup_ratio(target_nm):
+        try:
+            return df_incbeamcurr["incident beam current (A)/intSiref current (A)"].loc[
+                target_nm
+            ]
+        except KeyError:
+            raise KeyError(
+                f"No calibration value found at {target_nm:.0f} nm. "
+                "Use a wavelength present in the calibration table."
+            )
+
+    move_to(nm)
+    incbeamcurr_div_intSirefcurrent = lookup_ratio(nm)
 
     t0 = time.time()
 
     try:
         while not should_stop():
+
+            if get_target_wavelength is not None:
+                try:
+                    target = get_target_wavelength()
+                except Exception:
+                    target = None
+                if target is not None and float(target) != nm:
+                    new_nm = float(target)
+                    try:
+                        new_ratio = lookup_ratio(new_nm)
+                    except KeyError as e:
+                        emit_status(f"WARNING: {e}")
+                    else:
+                        nm = new_nm
+                        incbeamcurr_div_intSirefcurrent = new_ratio
+                        emit_status(f"Live monitoring wavelength changed to {nm:.0f} nm")
+                        move_to(nm)
 
             intSiref_current = reference_meter.measure_current() - reference_meter.dark_current
             cell_current = test_meter.measure_current() - test_meter.dark_current

@@ -39,6 +39,7 @@ from eqe.app.qt_models import (
     MODE_SECTIONS,
     SECTION_METADATA,
     SECTION_SCAN,
+    SECTION_WAVELENGTH,
     SECTION_BIAS,
     SECTION_MODULATION,
     SECTION_BACKGROUND,
@@ -49,11 +50,12 @@ from eqe.app.qt_models import (
 from eqe.app.widgets.session_panel import SessionPanel
 from eqe.app.widgets.metadata_panel import MetadataPanel
 from eqe.app.widgets.scan_panel import ScanPanel
+from eqe.app.widgets.wavelength_setting_panel import WavelengthSettingPanel
 from eqe.app.widgets.log_panel import LogPanel
 from eqe.app.widgets.bias_panel import BiasPanel
 from eqe.app.widgets.live_numeric_panel import LiveNumericPanel
 from eqe.app.widgets.eqe_plot_widget import EQEPlotWidget
-from eqe.app.qt_models import STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE
+from eqe.app.qt_models import LIVE_MODES
 from eqe.io.data_io import save_data
 from eqe.io.paths import get_paths, create_user_directory
 
@@ -99,6 +101,7 @@ class MainWindow(QMainWindow):
         self.section_widgets = {
             SECTION_METADATA: self.metadata_group,
             SECTION_SCAN: self.scan_group,
+            SECTION_WAVELENGTH: self.wavelength_group,
             SECTION_BIAS: self.bias_group,
             SECTION_MODULATION: self.modulation_group,
             SECTION_BACKGROUND: self.background_group,
@@ -133,6 +136,12 @@ class MainWindow(QMainWindow):
         # measurement controller
         self.controller = MeasurementController()
 
+        # Apply a wavelength change live if a live measurement is
+        # currently running (see controller.set_live_wavelength()).
+        self.wavelength_setting_panel.wavelength_changed.connect(
+            self.controller.set_live_wavelength
+        )
+
 
     def _on_mode_changed(self, mode):
         """
@@ -164,15 +173,35 @@ class MainWindow(QMainWindow):
         config = self.collect_measurement_config()
 
         try:
+            mode = self.session_panel.get_mode()
+            is_live = mode in LIVE_MODES
+
+            # --------------------------------------------------
+            # Wavelength(s): live modes measure at a single fixed
+            # wavelength (Wavelength setting panel), not a swept range
+            # (Spectral Scan panel) -- there is no "stop"/"step" for a
+            # live mode, so building/validating a (start, stop) range
+            # for it doesn't apply and must not be attempted.
+            # --------------------------------------------------
+            if is_live:
+                live_wavelength = self.wavelength_setting_panel.get_wavelength()
+                wl_start = int(live_wavelength)
+                wl_stop = wl_start
+                interval = 1  # unused by the live-monitoring path
+            else:
+                wl_start = int(self.scan_panel.start_nm_spin.value())
+                wl_stop = int(self.scan_panel.stop_nm_spin.value())
+                interval = int(self.scan_panel.step_nm_spin.value())
+
             # --------------------------------------------------
             # Build legacy MeasurementParams object
             # --------------------------------------------------
             params = MeasurementParams(
                 user=self.session_panel.get_user().strip(),
                 sample=self.metadata_panel.sample_name_edit.text().strip(),
-                wl_start=int(self.scan_panel.start_nm_spin.value()),
-                wl_stop=int(self.scan_panel.stop_nm_spin.value()),
-                interval=int(self.scan_panel.step_nm_spin.value()),
+                wl_start=wl_start,
+                wl_stop=wl_stop,
+                interval=interval,
                 calibration_measurement=False,
                 show_raw=False,
                 save_raw=False,
@@ -180,8 +209,8 @@ class MainWindow(QMainWindow):
                 autosave=self.session_panel.get_autosave(),
             )
 
-            params.mode = self.session_panel.get_mode()
-            self._active_mode = params.mode
+            params.mode = mode
+            self._active_mode = mode
             self._configure_plots_for_mode(self._active_mode)
 
             # Reset plots for a new measurement
@@ -190,10 +219,25 @@ class MainWindow(QMainWindow):
             self.log_panel.append("Starting measurement")
 
             # --------------------------------------------------
-            # Validate wavelength limits
+            # Validate wavelength(s)
             # --------------------------------------------------
-            nm_lim = (params.wl_start, params.wl_stop)
-            nm_lim = nm_lim_ok(nm_lim, params.calibration_measurement, debug=False)
+            if is_live:
+                if not (350.0 <= live_wavelength <= 1170.0):
+                    raise ValueError(
+                        f"Invalid wavelength: {live_wavelength:.1f} nm. "
+                        "Must be between 350 and 1170 nm."
+                    )
+                # Load calibration across the whole valid range so the
+                # wavelength can be changed freely while live monitoring
+                # is running (see controller.set_live_wavelength()),
+                # not just near the starting value.
+                nm_lim = (350, 1170)
+                # Sync the initial live-target wavelength before the
+                # measurement thread starts polling for changes.
+                self.controller.set_live_wavelength(live_wavelength)
+            else:
+                nm_lim = (params.wl_start, params.wl_stop)
+                nm_lim = nm_lim_ok(nm_lim, params.calibration_measurement, debug=False)
 
             # --------------------------------------------------
             # Connect instruments
@@ -439,7 +483,7 @@ class MainWindow(QMainWindow):
 
         # Forward the plot update safely to the GUI thread
 
-        if getattr(self, "_active_mode", None) in (STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE):
+        if getattr(self, "_active_mode", None) in LIVE_MODES:
             x_value = float(time_s)
             y2_value = float(cell_current)
         else:
@@ -574,10 +618,11 @@ class MainWindow(QMainWindow):
             # Show or hide the widget
             widget.setVisible(visible)
 
-        # Live modes only use the scan panel's start wavelength (see
-        # controller.py's worker()); stop/step/direction are otherwise
-        # collected from the GUI but silently ignored, which is confusing.
-        self.scan_panel.set_range_fields_visible(mode not in (STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE))
+        # Integrated current is only meaningful over a wavelength sweep;
+        # it's structurally always 0 during live monitoring at a single
+        # fixed wavelength, so hide it there rather than show a
+        # permanent, confusing "0.00".
+        self.live_numeric_panel.set_integrated_current_visible(mode not in LIVE_MODES)
 
 
     def _build_ui(self):
@@ -652,6 +697,16 @@ class MainWindow(QMainWindow):
         self.scan_group.layout().addWidget(self.scan_panel)
 
         setup_layout.addWidget(self.scan_group)
+
+        # Wavelength setting (live modes only -- a single fixed
+        # wavelength, not a sweep range; see SECTION_WAVELENGTH)
+        self.wavelength_group = QGroupBox("Wavelength setting")
+        self.wavelength_group.setLayout(QVBoxLayout())
+
+        self.wavelength_setting_panel = WavelengthSettingPanel()
+        self.wavelength_group.layout().addWidget(self.wavelength_setting_panel)
+
+        setup_layout.addWidget(self.wavelength_group)
 
         # Electrical bias
         self.bias_group = QGroupBox("Electrical Bias")
@@ -776,9 +831,7 @@ class MainWindow(QMainWindow):
         Configure plot labels according to the selected measurement mode.
         """
 
-        from eqe.app.qt_models import STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE
-
-        if mode in (STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE):
+        if mode in LIVE_MODES:
             self.eqe_plot_widget.ax.set_xlabel("Time (s)")
             self.eqe_plot_widget.ax.set_ylabel("EQE (%)")
             self.eqe_plot_widget.ax2.set_ylabel("Cell current (A)")
