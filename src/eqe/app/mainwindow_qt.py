@@ -1013,6 +1013,10 @@ class MainWindow(QMainWindow):
             self.eqe_plot_widget.ax.set_ylabel("Internal reference cell current (A)")
             self.eqe_plot_widget.ax2.set_ylabel("Si71889 reference cell current (A)")
             self.eqe_plot_widget.ax.set_title("Live currents")
+            self.eqe_plot_widget.set_legend_labels(
+                "Internal reference cell current (A)",
+                "Si71889 reference cell current (A)",
+            )
             self.live_numeric_panel.set_eqe_visible(False)
             self.live_numeric_panel.set_integrated_current_visible(False)
 
@@ -1021,6 +1025,7 @@ class MainWindow(QMainWindow):
             self.eqe_plot_widget.ax.set_ylabel("EQE (%)")
             self.eqe_plot_widget.ax2.set_ylabel("Cell current (A)")
             self.eqe_plot_widget.ax.set_title("Live EQE / Cell Current vs Time")
+            self.eqe_plot_widget.set_legend_labels("EQE (%)", "Cell current (A)")
             self.live_numeric_panel.set_eqe_visible(True)
             self.live_numeric_panel.set_integrated_current_visible(False)
 
@@ -1029,6 +1034,9 @@ class MainWindow(QMainWindow):
             self.eqe_plot_widget.ax.set_ylabel("EQE (%)")
             self.eqe_plot_widget.ax2.set_ylabel("Integrated current (mA/cm²)")
             self.eqe_plot_widget.ax.set_title("EQE Spectrum / Integrated Current")
+            self.eqe_plot_widget.set_legend_labels(
+                "EQE (%)", "Integrated current (mA/cm²)"
+            )
             self.live_numeric_panel.set_eqe_visible(True)
             self.live_numeric_panel.set_integrated_current_visible(True)
 

@@ -55,7 +55,35 @@ class EQEPlotWidget(QWidget):
             [], [], color="orange", linestyle="-", label="Integrated current"
         )
 
+        # One legend combining both axes' lines -- without this, a
+        # two-line/two-axis plot like this doesn't say which curve is
+        # which (e.g. during a calibration measurement, the two lines are
+        # two different physical cells' currents on very different
+        # scales; mixing them up matters). Kept in sync with the actual
+        # line labels by set_legend_labels(), called whenever
+        # mainwindow_qt.py switches what this plot is showing.
+        self._update_legend()
+
         self.canvas.draw()
+
+    def _update_legend(self):
+        handles1, labels1 = self.ax.get_legend_handles_labels()
+        handles2, labels2 = self.ax2.get_legend_handles_labels()
+        self.ax.legend(handles1 + handles2, labels1 + labels2, loc="best")
+
+    def set_legend_labels(self, label1, label2):
+        """
+        Update the two curves' legend labels -- call whenever what they
+        represent changes (e.g. switching between a regular scan's
+        "EQE (%)"/"Integrated current" and a calibration measurement's
+        two different cells' raw currents; see mainwindow_qt.py's
+        _configure_plots_for_mode()).
+        """
+
+        self.line.set_label(label1)
+        self.line2.set_label(label2)
+        self._update_legend()
+        self.canvas.draw_idle()
 
     def update_curve(self, wavelengths, eqe_values):
         """
