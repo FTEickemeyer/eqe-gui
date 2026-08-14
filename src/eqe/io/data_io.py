@@ -171,7 +171,11 @@ def save_data(
     dat_time = str(datetime.datetime.now())
     dat_time_file = dat_time.split(".")[0].replace(":", "-").replace(" ", "_time")
 
-    fp_ipce = user_dir / f"EQE_{sample_name}_date{dat_time_file}.csv"
+    # "Calibration_..." for a calibration measurement (no EQE is computed
+    # for it -- see below), "EQE_..." for a regular scan/live measurement.
+    file_prefix = "Calibration" if calibration_measurement else "EQE"
+
+    fp_ipce = user_dir / f"{file_prefix}_{sample_name}_date{dat_time_file}.csv"
 
     header = build_measurement_header(
         hardware=hardware,
@@ -190,7 +194,7 @@ def save_data(
         df.to_csv(f)
 
     if fig is not None:
-        fp_fig = user_dir / f"EQE_{sample_name}_date{dat_time_file}.png"
+        fp_fig = user_dir / f"{file_prefix}_{sample_name}_date{dat_time_file}.png"
         fig.savefig(fp_fig, dpi=300, bbox_inches="tight")
 
     print(f"File saved: {fp_ipce}")
