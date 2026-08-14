@@ -52,6 +52,7 @@ from eqe.app.widgets.metadata_panel import MetadataPanel
 from eqe.app.widgets.scan_panel import ScanPanel
 from eqe.app.widgets.wavelength_setting_panel import WavelengthSettingPanel
 from eqe.app.widgets.calibration_panel import CalibrationPanel
+from eqe.app.widgets.advanced_acquisition_panel import AdvancedAcquisitionPanel
 from eqe.app.widgets.log_panel import LogPanel
 from eqe.app.widgets.bias_panel import BiasPanel
 from eqe.app.widgets.live_numeric_panel import LiveNumericPanel
@@ -147,6 +148,11 @@ class MainWindow(QMainWindow):
         # _on_start()/_save_last_result()).
         self._last_df_ref = None
         self._active_calibration_measurement = False
+        # Name of the incident-beam calibration file the run that produced
+        # _last_result_df was computed against (None for a calibration
+        # measurement itself, which doesn't use one) -- see _on_start()
+        # and _save_last_result().
+        self._last_incbeamcurr_filename = None
 
         # measurement controller
         self.controller = MeasurementController()
@@ -184,11 +190,16 @@ class MainWindow(QMainWindow):
     def _on_calibration_toggled(self, checked):
         """
         Pre-fill the sample name with the Si71889 (external calibration
-        cell) identifier when "Calibration measurement" is checked.
+        cell) identifier, and the scan range with the full 350-1170 nm
+        range a calibration measurement always covers regardless of what
+        the Start/Stop fields say (see nm_lim_ok()'s calibration branch),
+        when "Calibration measurement" is checked.
         """
 
         if checked:
             self.metadata_panel.sample_name_edit.setText("Si71889")
+            self.scan_panel.start_nm_spin.setValue(350)
+            self.scan_panel.stop_nm_spin.setValue(1170)
 
     def _on_mode_changed(self, mode):
         """
@@ -316,10 +327,11 @@ class MainWindow(QMainWindow):
             # --------------------------------------------------
             # Load calibration
             # --------------------------------------------------
-            df_incbeamcurr, df_ref = open_calibration(
+            df_incbeamcurr, df_ref, fp_incbeamcurr = open_calibration(
                 nm_lim,
                 params.calibration_measurement,
                 debug=False,
+                on_status=self.on_status,
             )
 
             # Remembered for _save_last_result(): a calibration
@@ -328,13 +340,23 @@ class MainWindow(QMainWindow):
             # incident-beam calibration
             # file, and must use the same calibration_measurement flag
             # the run was actually started with, not a possibly-changed
-            # checkbox state at save time.
+            # checkbox state at save time. The incident-beam calibration
+            # filename actually used (None for a calibration measurement
+            # itself) is recorded in the saved file's metadata header so
+            # it stays traceable later, even after a newer one is produced.
             self._last_df_ref = df_ref
             self._active_calibration_measurement = params.calibration_measurement
+            self._last_incbeamcurr_filename = (
+                fp_incbeamcurr.name if fp_incbeamcurr is not None else None
+            )
 
             # --------------------------------------------------
             # Start measurement
             # --------------------------------------------------
+
+            stabilization_time_s = (
+                self.advanced_acquisition_panel.get_values()["stabilization_time_ms"] / 1000.0
+            )
 
             self.controller.run_measurement_async(
                 params=params,
@@ -344,6 +366,7 @@ class MainWindow(QMainWindow):
                 bias_voltage=config.bias_voltage,
                 compliance_current=config.compliance_current,
                 direction=config.direction,
+                stabilization_time_s=stabilization_time_s,
                 ui_dispatch=self._dispatch_to_gui,
                 callbacks={
                     "on_live_update": self.on_live_update,
@@ -395,6 +418,7 @@ class MainWindow(QMainWindow):
             is_live = getattr(self, "_active_mode", None) in LIVE_MODES
             scan = None if is_live else self.scan_panel.get_values()
             bias = self.bias_panel.get_values()
+            advanced = self.advanced_acquisition_panel.get_values()
 
             sample_name = metadata["sample_name"] or "sample"
             user_name = self.session_panel.get_user().strip() or "user"
@@ -416,6 +440,8 @@ class MainWindow(QMainWindow):
                 metadata=metadata,
                 scan=scan,
                 bias=bias,
+                advanced=advanced,
+                calibration_filename=self._last_incbeamcurr_filename,
             )
 
             self.log_panel.append(f"Saved: {fp}")
@@ -860,7 +886,8 @@ class MainWindow(QMainWindow):
         # Advanced acquisition settings
         self.advanced_group = QGroupBox("Advanced Acquisition Settings")
         self.advanced_group.setLayout(QVBoxLayout())
-        self.advanced_group.layout().addWidget(QLabel("Advanced controls placeholder"))
+        self.advanced_acquisition_panel = AdvancedAcquisitionPanel()
+        self.advanced_group.layout().addWidget(self.advanced_acquisition_panel)
         setup_layout.addWidget(self.advanced_group)
 
         # Stretch ensures panels stay at the top

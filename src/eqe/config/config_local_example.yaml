@@ -4,4 +4,7 @@ paths:
   logs_dir: C:/Users/labo/AppData/Local/eqe/logs
 
 calibration:
-  active_incident_beam_file: incbeamcurr_Si71889_850nm-wavelength-change_date2025-10-23_time10-49-42.csv
+  # Leave unset (null) to always use the most recently produced
+  # incbeamcurr_*.csv in calibrations_dir automatically. Set it to a
+  # specific filename only to pin a particular calibration instead.
+  active_incident_beam_file: null

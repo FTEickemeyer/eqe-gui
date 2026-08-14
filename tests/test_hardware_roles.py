@@ -10,6 +10,7 @@ No real instruments are used -- everything here talks to fakes/mocks.
 """
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -279,6 +280,175 @@ class PerformMeasurementRoleAgnosticTests(unittest.TestCase):
         # Even though the loop raised, cleanup in `finally` must have run.
         self.assertEqual(test_meter.bias_voltage, 0.0)
         self.assertFalse(test_meter.output_enabled)
+
+
+# ---------------------------------------------------------------------
+# Stabilization time: the "Advanced Acquisition Settings" wait applied
+# after every wavelength move, before that point's reading (see
+# AdvancedAcquisitionPanel). interruptible_sleep() is mocked out so these
+# tests don't actually sleep -- only that it's *called* with the right
+# duration matters here.
+# ---------------------------------------------------------------------
+
+class StabilizationTimeTests(unittest.TestCase):
+    def _calibration_df(self, wavelengths):
+        return pd.DataFrame(
+            {"incident beam current (A)/intSiref current (A)": [1.0] * len(wavelengths)},
+            index=list(wavelengths),
+        )
+
+    def test_scan_mode_waits_after_each_wavelength_move(self):
+        mono = FakeMonochromator()
+        reference_meter = FakeCurrentMeter()
+        test_meter = FakeBiasCurrentMeter()
+        hardware = MeasurementHardware(
+            reference_meter=reference_meter, test_meter=test_meter, monochromator=mono
+        )
+        df_incbeamcurr = self._calibration_df(range(400, 421, 10))
+
+        with mock.patch(
+            "eqe.core.measurement_engine.interruptible_sleep", return_value=True
+        ) as sleep_mock:
+            perform_measurement(
+                hardware,
+                df_incbeamcurr,
+                calibration_measurement=False,
+                nm_lim=(400, 420),
+                delta_nm=10,
+                stabilization_time_s=0.25,
+            )
+
+        sleep_durations = [call.args[0] for call in sleep_mock.call_args_list]
+        # Once per point (3 points: 400, 410, 420), in addition to the
+        # pre-existing 2.0s grating-change wait on the first point.
+        self.assertEqual(sleep_durations.count(0.25), 3)
+
+    def test_scan_mode_skips_wait_when_stabilization_time_is_zero(self):
+        mono = FakeMonochromator()
+        reference_meter = FakeCurrentMeter()
+        test_meter = FakeBiasCurrentMeter()
+        hardware = MeasurementHardware(
+            reference_meter=reference_meter, test_meter=test_meter, monochromator=mono
+        )
+        df_incbeamcurr = self._calibration_df(range(400, 411, 10))
+
+        with mock.patch(
+            "eqe.core.measurement_engine.interruptible_sleep", return_value=True
+        ) as sleep_mock:
+            perform_measurement(
+                hardware,
+                df_incbeamcurr,
+                calibration_measurement=False,
+                nm_lim=(400, 410),
+                delta_nm=10,
+                stabilization_time_s=0.0,
+            )
+
+        # Only the pre-existing grating-change wait remains; no extra
+        # per-point stabilization wait was added.
+        sleep_durations = [call.args[0] for call in sleep_mock.call_args_list]
+        self.assertEqual(sleep_durations, [2.0])
+
+    def test_live_monitoring_waits_after_initial_and_mid_run_moves(self):
+        mono = FakeMonochromator()
+        reference_meter = FakeCurrentMeter(value=1e-6)
+        test_meter = FakeBiasCurrentMeter(value=2e-6)
+        hardware = MeasurementHardware(
+            reference_meter=reference_meter, test_meter=test_meter, monochromator=mono
+        )
+        df_incbeamcurr = self._calibration_df(range(400, 601, 10))
+
+        targets = iter([550, 600, 600])
+
+        def get_target_wavelength():
+            return next(targets, 600)
+
+        calls = {"n": 0}
+
+        def stop_requested():
+            calls["n"] += 1
+            return calls["n"] > 3
+
+        with mock.patch(
+            "eqe.core.measurement_engine.interruptible_sleep", return_value=True
+        ) as sleep_mock:
+            perform_live_monitoring(
+                hardware,
+                df_incbeamcurr,
+                wavelength_nm=550,
+                stop_requested=stop_requested,
+                update_interval_s=0,
+                get_target_wavelength=get_target_wavelength,
+                stabilization_time_s=0.1,
+            )
+
+        sleep_durations = [call.args[0] for call in sleep_mock.call_args_list]
+        # Once for the initial move to 550, once for the mid-run move to
+        # 600 (update_interval_s=0 disables the separate pacing sleep, so
+        # these are the only calls).
+        self.assertEqual(sleep_durations.count(0.1), 2)
+        self.assertEqual(len(sleep_durations), 2)
+
+
+# ---------------------------------------------------------------------
+# Automatic "latest calibration" selection (analysis/calibration.py)
+# ---------------------------------------------------------------------
+
+class FindLatestIncidentBeamFileTests(unittest.TestCase):
+    def test_picks_file_with_latest_encoded_timestamp(self):
+        from eqe.analysis.calibration import find_latest_incident_beam_file
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            older = tmp / (
+                "incbeamcurr_Si71889_850nm-wavelength-change_"
+                "date2025-10-23_time10-49-42.csv"
+            )
+            newer = tmp / (
+                "incbeamcurr_Si71889_850nm-wavelength-change_"
+                "date2026-08-14_time14-20-53.csv"
+            )
+            # Write the "older" file *after* the "newer" one, so mtime
+            # would pick the wrong file if it were used instead of the
+            # filename-encoded timestamp.
+            newer.write_text("x")
+            older.write_text("x")
+
+            result = find_latest_incident_beam_file(tmp)
+
+        self.assertEqual(result, newer)
+
+    def test_returns_none_when_no_files_present(self):
+        from eqe.analysis.calibration import find_latest_incident_beam_file
+
+        with tempfile.TemporaryDirectory() as tmp:
+            result = find_latest_incident_beam_file(Path(tmp))
+
+        self.assertIsNone(result)
+
+    def test_falls_back_to_mtime_for_unrecognized_filenames(self):
+        import os
+        import time
+
+        from eqe.analysis.calibration import find_latest_incident_beam_file
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            first = tmp / "incbeamcurr_legacy_name.csv"
+            first.write_text("x")
+            second = tmp / "incbeamcurr_newer_legacy_name.csv"
+            second.write_text("x")
+
+            # Neither filename matches the timestamp pattern, so mtime is
+            # what decides -- set them explicitly rather than relying on
+            # two back-to-back writes landing in different mtime ticks.
+            now = time.time()
+            os.utime(first, (now - 100, now - 100))
+            os.utime(second, (now, now))
+
+            result = find_latest_incident_beam_file(tmp)
+
+        self.assertEqual(result, second)
 
 
 # ---------------------------------------------------------------------

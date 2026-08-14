@@ -41,6 +41,7 @@ def perform_measurement(
     on_point_acquired=None,
     grating_change_nm=GRATING_CHANGE_NM,
     direction="Ascending",
+    stabilization_time_s=0.0,
 ):
     """
     GUI-agnostic measurement loop.
@@ -49,6 +50,10 @@ def perform_measurement(
     exposing `reference_meter`, `test_meter` and `monochromator`. This
     function never assumes a particular instrument model -- only the
     CurrentMeter / BiasCurrentMeter role API.
+
+    `stabilization_time_s` is an additional wait applied after every
+    wavelength move, before that point's reading, letting the cell's
+    photocurrent settle (see AdvancedAcquisitionPanel).
 
     Plotting is not handled here.
     Progress and data are emitted via callbacks.
@@ -149,6 +154,13 @@ def perform_measurement(
                 # in scan order -- for a descending scan that's nm_lim[1].
                 if nm == wavelengths[0] or nm == grating_change_nm:
                     if not interruptible_sleep(2.0, stop_requested):
+                        emit_status("Measurement stopped.")
+                        break
+
+                # Let the cell's photocurrent settle after the wavelength
+                # move, before reading it (see AdvancedAcquisitionPanel).
+                if stabilization_time_s > 0:
+                    if not interruptible_sleep(stabilization_time_s, stop_requested):
                         emit_status("Measurement stopped.")
                         break
 
@@ -321,6 +333,7 @@ def perform_live_monitoring(
     on_point_acquired=None,
     update_interval_s=0.5,
     get_target_wavelength=None,
+    stabilization_time_s=0.0,
 ):
     """
     GUI-agnostic live monitoring loop at one fixed (but changeable, see
@@ -347,6 +360,10 @@ def perform_live_monitoring(
     the new wavelength before measuring continues. Lets the operator
     change wavelength while live monitoring is running, without having
     to stop and restart it.
+
+    `stabilization_time_s` is an additional wait applied after every
+    wavelength move (initial and mid-run), before the first reading at
+    that wavelength, letting the cell's photocurrent settle.
     """
 
     mono = hardware.monochromator
@@ -381,6 +398,11 @@ def perform_live_monitoring(
         mono.shutter(True)
         mono.goto_nm(target_nm, on_status=emit_status)
         mono.shutter(False)
+        # Let the cell's photocurrent settle after the wavelength move,
+        # before reading it (see AdvancedAcquisitionPanel). Applies both
+        # to the initial move and to mid-run wavelength changes.
+        if stabilization_time_s > 0:
+            interruptible_sleep(stabilization_time_s, stop_requested)
 
     def lookup_ratio(target_nm):
         try:

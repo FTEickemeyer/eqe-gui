@@ -66,6 +66,23 @@ def _scan_lines(scan):
     ]
 
 
+def _calibration_source_lines(calibration_filename):
+    """
+    `calibration_filename` is the name of the incbeamcurr_*.csv this
+    measurement's EQE was computed against (see analysis/calibration.py's
+    open_calibration()). None for a calibration measurement itself, which
+    doesn't use one -- so this section is omitted for those.
+    """
+    if not calibration_filename:
+        return []
+
+    return [
+        "# Calibration:",
+        f"#   Incident-beam calibration file: {calibration_filename}",
+        "#",
+    ]
+
+
 def _bias_lines(bias):
     """`bias` is the dict returned by BiasPanel.get_values()."""
     if bias is None:
@@ -83,13 +100,39 @@ def _bias_lines(bias):
     ]
 
 
-def build_measurement_header(hardware=None, metadata=None, scan=None, bias=None):
+def _advanced_lines(advanced):
+    """
+    `advanced` is the dict returned by AdvancedAcquisitionPanel.get_values().
+
+    Recorded regardless of mode (scan or live) -- these are fixed
+    acquisition settings, not something that varies per point the way a
+    live measurement's wavelength can.
+    """
+    if not advanced:
+        return []
+
+    return [
+        "# Advanced acquisition settings:",
+        f"#   Stabilization time (ms): {advanced.get('stabilization_time_ms', '')}",
+        "#",
+    ]
+
+
+def build_measurement_header(
+    hardware=None,
+    metadata=None,
+    scan=None,
+    bias=None,
+    advanced=None,
+    calibration_filename=None,
+):
     """
     Build the commented metadata preamble written before the data table in
     a saved measurement CSV: used hardware, sample/metadata, spectral scan
-    conditions, and bias settings. Any section is omitted if its dict/
-    object isn't provided, so this stays optional for callers that don't
-    have that context (e.g. the calibration-file save path below).
+    conditions, the incident-beam calibration file used, bias settings,
+    and advanced acquisition settings. Any section is omitted if its
+    dict/object isn't provided, so this stays optional for callers that
+    don't have that context (e.g. the calibration-file save path below).
     """
 
     lines = [
@@ -101,7 +144,9 @@ def build_measurement_header(hardware=None, metadata=None, scan=None, bias=None)
     lines += _hardware_identity_lines(hardware)
     lines += _metadata_lines(metadata)
     lines += _scan_lines(scan)
+    lines += _calibration_source_lines(calibration_filename)
     lines += _bias_lines(bias)
+    lines += _advanced_lines(advanced)
 
     return "\n".join(lines) + "\n"
 
@@ -118,6 +163,8 @@ def save_data(
     metadata=None,
     scan=None,
     bias=None,
+    advanced=None,
+    calibration_filename=None,
 ):
     user_dir = Path(user_dir)
 
@@ -126,7 +173,14 @@ def save_data(
 
     fp_ipce = user_dir / f"EQE_{sample_name}_date{dat_time_file}.csv"
 
-    header = build_measurement_header(hardware=hardware, metadata=metadata, scan=scan, bias=bias)
+    header = build_measurement_header(
+        hardware=hardware,
+        metadata=metadata,
+        scan=scan,
+        bias=bias,
+        advanced=advanced,
+        calibration_filename=calibration_filename,
+    )
 
     # Always include the raw reference/test-cell currents alongside EQE
     # (previously the GUI's save path silently dropped "Current ref (A)"/

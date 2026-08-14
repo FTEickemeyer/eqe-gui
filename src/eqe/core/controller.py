@@ -136,6 +136,7 @@ class MeasurementController:
         bias_voltage=0.0,
         compliance_current=1e-3,
         direction="Ascending",
+        stabilization_time_s=0.0,
         callbacks=None,
         ui_dispatch=None,
     ):
@@ -174,6 +175,7 @@ class MeasurementController:
                             callbacks.get("on_point_acquired"), ui_dispatch, **payload
                         ),
                         get_target_wavelength=self.get_live_wavelength,
+                        stabilization_time_s=stabilization_time_s,
                     )
 
                 else:
@@ -191,6 +193,7 @@ class MeasurementController:
                         compliance_current=compliance_current,
                         grating_change_nm=self.config["calibration"]["grating_change_nm"],
                         direction=direction,
+                        stabilization_time_s=stabilization_time_s,
 
                         on_live_update=lambda message: self._emit(
                             callbacks.get("on_live_update"), ui_dispatch, message

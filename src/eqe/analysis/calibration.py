@@ -1,3 +1,5 @@
+import datetime
+import re
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -16,7 +18,45 @@ def get_reference_cell_path(filename: str) -> Path:
     return get_package_root() / "resources" / "calibration_defaults" / filename
 
 
-def open_calibration(nm_lim, calibration_measurement, debug=False):
+# Matches the "_date<YYYY-MM-DD>_time<HH-MM-SS>.csv" suffix save_data()
+# writes onto every incbeamcurr_*.csv it produces (see io/data_io.py).
+_INCBEAMCURR_TIMESTAMP_RE = re.compile(
+    r"_date(?P<date>\d{4}-\d{2}-\d{2})_time(?P<time>\d{2}-\d{2}-\d{2})\.csv$"
+)
+
+
+def find_latest_incident_beam_file(calibrations_dir):
+    """
+    Return the most recently produced incbeamcurr_*.csv in
+    `calibrations_dir`, or None if there isn't one.
+
+    "Most recent" is judged by the date/time encoded in the filename (the
+    moment the calibration measurement finished, see save_data()), not
+    file modification time, so copying/restoring a file doesn't change
+    which one is picked. Falls back to file modification time for any
+    file that doesn't match the expected naming pattern.
+    """
+    calibrations_dir = Path(calibrations_dir)
+    candidates = list(calibrations_dir.glob("incbeamcurr_*.csv"))
+    if not candidates:
+        return None
+
+    def sort_key(fp):
+        m = _INCBEAMCURR_TIMESTAMP_RE.search(fp.name)
+        if m:
+            try:
+                return datetime.datetime.strptime(
+                    f"{m.group('date')} {m.group('time').replace('-', ':')}",
+                    "%Y-%m-%d %H:%M:%S",
+                )
+            except ValueError:
+                pass
+        return datetime.datetime.fromtimestamp(fp.stat().st_mtime)
+
+    return max(candidates, key=sort_key)
+
+
+def open_calibration(nm_lim, calibration_measurement, debug=False, on_status=None):
     """
     Load the two calibration inputs. Not to be confused with each other:
 
@@ -27,6 +67,19 @@ def open_calibration(nm_lim, calibration_measurement, debug=False):
       calibration, giving the ratio against the *internal* reference
       cell's current (Siref/intSiref, always read via reference_meter)
       used for every regular EQE scan.
+
+    If `calibration.active_incident_beam_file` isn't set in config, the
+    most recently produced incbeamcurr_*.csv in calibrations_dir is used
+    automatically (see find_latest_incident_beam_file()) -- set it
+    explicitly only to pin a specific file instead of always using the
+    latest measurement.
+
+    Returns (df_incbeamcurr, df_ref, fp_incbeamcurr): fp_incbeamcurr is
+    the resolved Path of the incident-beam calibration file actually
+    used (whichever of the two ways above picked it), or None for a
+    calibration measurement (calibration_measurement=True), which
+    doesn't use one. Callers that save a measurement should record its
+    name in the saved file's metadata so it's traceable afterward.
     """
     config = load_config()
     paths = get_paths()
@@ -51,19 +104,33 @@ def open_calibration(nm_lim, calibration_measurement, debug=False):
         plt.show()
 
     if calibration_measurement:
-        return None, df_ref
+        # No incident-beam calibration is used to compute EQE for a
+        # calibration measurement itself (it produces one instead).
+        return None, df_ref, None
 
-    if not active_incident_beam_file:
-        raise FileNotFoundError(
-            "No active incident-beam calibration file is configured. "
-            "Set calibration.active_incident_beam_file in config_local.yaml."
-        )
+    if active_incident_beam_file:
+        # Explicit pin, e.g. for reverting to or testing a specific
+        # calibration -- takes priority over auto-selecting the latest.
+        fp_incbeamcurr = paths["calibrations_dir"] / active_incident_beam_file
+        if not fp_incbeamcurr.exists():
+            raise FileNotFoundError(
+                f"Configured incident-beam calibration file not found: {fp_incbeamcurr}"
+            )
+    else:
+        fp_incbeamcurr = find_latest_incident_beam_file(paths["calibrations_dir"])
+        if fp_incbeamcurr is None:
+            raise FileNotFoundError(
+                "No incident-beam calibration files found in "
+                f"{paths['calibrations_dir']}. Run a calibration measurement "
+                "first (see README's 'Running a calibration measurement'), "
+                "or set calibration.active_incident_beam_file to pin a "
+                "specific file."
+            )
 
-    fp_incbeamcurr = paths["calibrations_dir"] / active_incident_beam_file
-    if not fp_incbeamcurr.exists():
-        raise FileNotFoundError(
-            f"Configured incident-beam calibration file not found: {fp_incbeamcurr}"
-        )
+    if on_status is not None:
+        on_status(f"Using incident-beam calibration: {fp_incbeamcurr.name}")
+    elif debug:
+        print(f"Using incident-beam calibration: {fp_incbeamcurr}")
 
     df_incbeamcurr = pd.read_csv(fp_incbeamcurr).set_index("Wavelength (nm)")
 
@@ -71,11 +138,10 @@ def open_calibration(nm_lim, calibration_measurement, debug=False):
     df_incbeamcurr = df_interpolate(df_incbeamcurr, nm_arr)
 
     if debug:
-        print(f"Using incident-beam calibration: {fp_incbeamcurr}")
         df_incbeamcurr.plot()
         plt.show()
         df_incbeamcurr["incident beam current (A)/intSiref current (A)"].plot()
         plt.title("df_incbeamcurr")
         plt.show()
 
-    return df_incbeamcurr, df_ref
+    return df_incbeamcurr, df_ref, fp_incbeamcurr

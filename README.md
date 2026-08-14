@@ -99,6 +99,15 @@ To run without hardware, enable simulation mode from the **Session** panel in th
 GUI — this swaps in `SimulatedSMU`/`SimulatedMonochromator` and lets you exercise
 scan mode, live mode, and saving without any instrument connected.
 
+### Advanced Acquisition Settings
+
+**Stabilization time** (default 100 ms) is how long the measurement waits after the
+monochromator moves to a new wavelength, before taking a reading — giving the
+cell's photocurrent time to settle. It applies after every wavelength move in both
+scan mode and live mode (including wavelength changes made mid-run from the
+Wavelength setting panel). All settings in this panel are recorded in the metadata
+header of saved files.
+
 ## Calibration
 
 Two different reference cells are involved, and they should never be confused:
@@ -117,8 +126,14 @@ Config keys for each:
   `calibration.reference_cell_file`.
 - The **incident-beam calibration** (`calibration.active_incident_beam_file`) is
   machine/setup-specific — it's a measurement you produce yourself (see below) and
-  must live in `calibrations_dir`. There is no default; scans will fail with a clear
-  `FileNotFoundError` until this is set correctly.
+  must live in `calibrations_dir`. Left unset (the default), the **most recently
+  produced** `incbeamcurr_*.csv` in `calibrations_dir` is used automatically — set
+  it to a specific filename only if you want to pin a particular calibration instead
+  of always using the latest one. Either way, scans will fail with a clear
+  `FileNotFoundError` if no matching file can be found. The GUI logs which file it
+  picked ("Using incident-beam calibration: ...") at the start of every measurement,
+  and records its filename in the saved file's metadata header (`# Calibration:`
+  section) so it stays traceable even after a newer calibration is produced later.
 
 ### Running a calibration measurement
 
@@ -128,14 +143,17 @@ read as usual):
 
 1. Physically install the Si71889 reference cell (the one matching
    `calibration.reference_cell_file`) in place of the sample.
-2. Check **"Calibration measurement"** in the Calibration / Saving panel.
-3. Start a scan (Standard EQE mode) — a calibration scan always covers the full
-   350–1170 nm range, regardless of the Start/Stop fields.
+2. Check **"Calibration measurement"** in the Calibration / Saving panel. This also
+   sets the Start/Stop wavelength fields to 350/1170 nm to reflect the range that
+   will actually be scanned — a calibration scan always covers the full 350–1170 nm
+   range regardless of what's in those fields.
+3. Start a scan (Standard EQE mode).
 4. Click **Save** once it finishes. This writes both the usual measurement file
    (raw internal-reference/Si71889 currents only, no EQE) and a new
    `incbeamcurr_*.csv` into `calibrations_dir`.
-5. Point `calibration.active_incident_beam_file` in `config_local.yaml` at that new
-   filename to make it the active calibration.
+5. That's it — the new file becomes the active calibration automatically (the most
+   recently produced `incbeamcurr_*.csv` is always used, see above), unless
+   `calibration.active_incident_beam_file` is pinned to something else.
 
 ### Switching to a different external reference cell
 
@@ -153,8 +171,8 @@ means updating both:
    `config_local.yaml` to override it locally only.
 3. Run a new calibration measurement (see above) with the new cell physically
    installed. Use the new cell's ID as the sample name (e.g. `SiXXXXX`) so the
-   generated `incbeamcurr_SiXXXXX_*.csv` filename stays self-describing.
-4. Point `calibration.active_incident_beam_file` at that new file.
+   generated `incbeamcurr_SiXXXXX_*.csv` filename stays self-describing. Saving it
+   makes it the active calibration automatically (it's now the latest).
 
 This does **not** involve the internal reference cell in any way -- that one is a
 fixed part of the instrument, not something you swap or reconfigure.
