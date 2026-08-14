@@ -63,7 +63,7 @@ def open_calibration(nm_lim, calibration_measurement, debug=False):
         print(f"Using incident-beam calibration: {fp_incbeamcurr}")
         df_incbeamcurr.plot()
         plt.show()
-        df_incbeamcurr["incident beam current (A)/intSiref current (A)"].plot()
+        df_incbeamcurr["incident beam current (A)/intSi71889 current (A)"].plot()
         plt.title("df_incbeamcurr")
         plt.show()
 

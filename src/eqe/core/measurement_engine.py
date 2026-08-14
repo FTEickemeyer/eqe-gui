@@ -152,7 +152,7 @@ def perform_measurement(
                         emit_status("Measurement stopped.")
                         break
 
-                intSiref_current = reference_meter.measure_current() - reference_meter.dark_current
+                intSi71889_current = reference_meter.measure_current() - reference_meter.dark_current
                 cell_current = test_meter.measure_current() - test_meter.dark_current
 
                 if should_stop():
@@ -164,10 +164,10 @@ def perform_measurement(
 
                 IPCE = None
                 if not calibration_measurement:
-                    incbeamcurr_div_intSirefcurrent = df_incbeamcurr[
-                        "incident beam current (A)/intSiref current (A)"
+                    incbeamcurr_div_intSi71889current = df_incbeamcurr[
+                        "incident beam current (A)/intSi71889 current (A)"
                     ].loc[nm]
-                    denominator = incbeamcurr_div_intSirefcurrent * intSiref_current
+                    denominator = incbeamcurr_div_intSi71889current * intSi71889_current
                     if abs(denominator) < 1e-15:
                         IPCE = 0.0
                     else:
@@ -177,7 +177,7 @@ def perform_measurement(
                     IPCE_arr.append(IPCE)
                     current_IPCE_arr = np.array(IPCE_arr)
 
-                signal_A_arr.append(intSiref_current)
+                signal_A_arr.append(intSi71889_current)
                 signal_B_arr.append(cell_current)
                 measured_wavelengths.append(nm)
                 current_nm_arr = np.array(measured_wavelengths)
@@ -208,7 +208,7 @@ def perform_measurement(
 
                 if show_raw_signal:
                     emit_live_update(
-                        f"nm = {nm} nm - signal ref. cell (chA) = {intSiref_current:.2e} A "
+                        f"nm = {nm} nm - signal ref. cell (chA) = {intSi71889_current:.2e} A "
                         f"- signal test cell (chB) = {cell_current:.2e} A"
                     )
 
@@ -231,7 +231,7 @@ def perform_measurement(
                         eqe=float(IPCE) if IPCE is not None else None,
                         integrated_current=float(int_curr) if int_curr is not None else 0.0,
                         cell_current=float(cell_current) if cell_current is not None else 0.0,
-                        ref_current=float(intSiref_current) if intSiref_current is not None else 0.0,
+                        ref_current=float(intSi71889_current) if intSi71889_current is not None else 0.0,
 
                         # ----------------------------------------
                         # Legacy keys kept for backward compatibility
@@ -242,7 +242,7 @@ def perform_measurement(
                         signal_B_arr=list(signal_B_arr),
                         IPCE_arr=list(IPCE_arr),
                         int_curr_arr=list(int_curr_arr),
-                        intSiref_current=intSiref_current,
+                        intSi71889_current=intSi71889_current,
                         cell_current_legacy=cell_current,
                         IPCE=IPCE,
                         int_curr=int_curr,
@@ -384,7 +384,7 @@ def perform_live_monitoring(
 
     def lookup_ratio(target_nm):
         try:
-            return df_incbeamcurr["incident beam current (A)/intSiref current (A)"].loc[
+            return df_incbeamcurr["incident beam current (A)/intSi71889 current (A)"].loc[
                 target_nm
             ]
         except KeyError:
@@ -422,7 +422,7 @@ def perform_live_monitoring(
             emit_status("Bias disabled")
 
         move_to(nm)
-        incbeamcurr_div_intSirefcurrent = lookup_ratio(nm)
+        incbeamcurr_div_intSi71889current = lookup_ratio(nm)
 
         t0 = time.time()
 
@@ -447,17 +447,17 @@ def perform_live_monitoring(
                         emit_status(f"WARNING: {e}")
                     else:
                         nm = new_nm
-                        incbeamcurr_div_intSirefcurrent = new_ratio
+                        incbeamcurr_div_intSi71889current = new_ratio
                         emit_status(f"Live monitoring wavelength changed to {nm:.0f} nm")
                         move_to(nm)
 
-            intSiref_current = reference_meter.measure_current() - reference_meter.dark_current
+            intSi71889_current = reference_meter.measure_current() - reference_meter.dark_current
             cell_current = test_meter.measure_current() - test_meter.dark_current
 
             if getattr(test_meter, "compliance_hit", False):
                 emit_status(f"WARNING: Compliance limit reached at {nm:.0f} nm")
 
-            denominator = incbeamcurr_div_intSirefcurrent * intSiref_current
+            denominator = incbeamcurr_div_intSi71889current * intSi71889_current
             if abs(denominator) < 1e-15:
                 IPCE = 0.0
             else:
@@ -470,7 +470,7 @@ def perform_live_monitoring(
             time_arr.append(elapsed_s)
             wavelength_arr.append(nm)
             eqe_arr.append(IPCE)
-            ref_current_arr.append(intSiref_current)
+            ref_current_arr.append(intSi71889_current)
             cell_current_arr.append(cell_current)
 
             emit_live_update(
@@ -483,7 +483,7 @@ def perform_live_monitoring(
                     eqe=float(IPCE),
                     integrated_current=0.0,
                     cell_current=float(cell_current),
-                    ref_current=float(intSiref_current),
+                    ref_current=float(intSi71889_current),
 
                     # explicit live-mode keys
                     time_s=float(elapsed_s),
