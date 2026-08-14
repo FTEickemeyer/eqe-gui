@@ -53,7 +53,6 @@ from eqe.app.widgets.log_panel import LogPanel
 from eqe.app.widgets.bias_panel import BiasPanel
 from eqe.app.widgets.live_numeric_panel import LiveNumericPanel
 from eqe.app.widgets.eqe_plot_widget import EQEPlotWidget
-from eqe.app.widgets.integrated_current_plot_widget import IntegratedCurrentPlotWidget
 from eqe.app.qt_models import STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE
 from eqe.io.data_io import save_data
 from eqe.io.paths import get_paths, create_user_directory
@@ -117,14 +116,10 @@ class MainWindow(QMainWindow):
         self.log_panel.append("GUI initialized")
 
         # temporary test data
-        self.eqe_plot_widget.update_curve(
+        self.eqe_plot_widget.update_curves(
             [400, 500, 600, 700, 800],
-            [20, 45, 60, 50, 30]
-        )
-
-        self.current_plot_widget.update_curve(
-            [400, 500, 600, 700, 800],
-            [1.5, 5.2, 12.3, 15.8, 17.1]
+            [20, 45, 60, 50, 30],
+            [1.5, 5.2, 12.3, 15.8, 17.1],
         )
 
         # storage for measurement data during scans
@@ -479,14 +474,11 @@ class MainWindow(QMainWindow):
         self._eqe_values.append(float(eqe))
         self._current_values.append(float(integrated_current))
 
-        # Update plots
-        self.eqe_plot_widget.update_curve(
+        # Update plot (EQE on the left axis, integrated/cell current on
+        # the right, twin axis -- see EQEPlotWidget)
+        self.eqe_plot_widget.update_curves(
             self._wavelengths,
             self._eqe_values,
-        )
-
-        self.current_plot_widget.update_curve(
-            self._wavelengths,
             self._current_values,
         )
 
@@ -513,9 +505,8 @@ class MainWindow(QMainWindow):
         self._eqe_values = []
         self._current_values = []
 
-        # reset plots
-        self.eqe_plot_widget.update_curve([], [])
-        self.current_plot_widget.update_curve([], [])
+        # reset plot
+        self.eqe_plot_widget.update_curves([], [], [])
 
 
     def on_status(self, message):
@@ -698,7 +689,8 @@ class MainWindow(QMainWindow):
 
         splitter.addWidget(live_widget)
 
-        # Live EQE plot
+        # Live EQE plot (EQE on the left axis, integrated/cell current on
+        # a twin right-hand axis -- previously two separate stacked plots)
         self.eqe_plot_group = QGroupBox("Live EQE")
         self.eqe_plot_group.setLayout(QVBoxLayout())
 
@@ -707,16 +699,6 @@ class MainWindow(QMainWindow):
         self.eqe_plot_group.layout().addWidget(self.eqe_plot_widget)
 
         live_layout.addWidget(self.eqe_plot_group)
-
-        # Integrated current plot
-        self.current_plot_group = QGroupBox("Integrated Current")
-        self.current_plot_group.setLayout(QVBoxLayout())
-
-        self.current_plot_widget = IntegratedCurrentPlotWidget()
-
-        self.current_plot_group.layout().addWidget(self.current_plot_widget)
-
-        live_layout.addWidget(self.current_plot_group)
 
         # Live numeric readout
         self.readout_group = QGroupBox("Live Readout")
@@ -788,20 +770,13 @@ class MainWindow(QMainWindow):
         if mode in (STANDARD_LIVE_EQE, LOCKIN_LIVE_EQE):
             self.eqe_plot_widget.ax.set_xlabel("Time (s)")
             self.eqe_plot_widget.ax.set_ylabel("EQE (%)")
-            self.eqe_plot_widget.ax.set_title("Live EQE vs Time")
-
-            self.current_plot_widget.ax.set_xlabel("Time (s)")
-            self.current_plot_widget.ax.set_ylabel("Cell current (A)")
-            self.current_plot_widget.ax.set_title("Live Cell Current vs Time")
+            self.eqe_plot_widget.ax2.set_ylabel("Cell current (A)")
+            self.eqe_plot_widget.ax.set_title("Live EQE / Cell Current vs Time")
 
         else:
             self.eqe_plot_widget.ax.set_xlabel("Wavelength (nm)")
             self.eqe_plot_widget.ax.set_ylabel("EQE (%)")
-            self.eqe_plot_widget.ax.set_title("EQE Spectrum")
-
-            self.current_plot_widget.ax.set_xlabel("Wavelength (nm)")
-            self.current_plot_widget.ax.set_ylabel("Integrated current (mA/cm²)")
-            self.current_plot_widget.ax.set_title("Integrated Current")
+            self.eqe_plot_widget.ax2.set_ylabel("Integrated current (mA/cm²)")
+            self.eqe_plot_widget.ax.set_title("EQE Spectrum / Integrated Current")
 
         self.eqe_plot_widget.canvas.draw_idle()
-        self.current_plot_widget.canvas.draw_idle()
