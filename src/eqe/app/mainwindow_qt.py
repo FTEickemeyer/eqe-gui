@@ -206,8 +206,6 @@ class MainWindow(QMainWindow):
         Called when the measurement mode changes.
         """
 
-        print(f"Mode changed to: {mode}")
-
         # Update panel visibility
         self.update_mode_visibility(mode)
 
