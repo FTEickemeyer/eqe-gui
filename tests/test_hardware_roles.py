@@ -140,7 +140,7 @@ class ExplodingBiasCurrentMeter(FakeBiasCurrentMeter):
 class PerformMeasurementRoleAgnosticTests(unittest.TestCase):
     def _calibration_df(self, wavelengths):
         return pd.DataFrame(
-            {"incident beam current (A)/intSi71889 current (A)": [1.0] * len(wavelengths)},
+            {"incident beam current (A)/intSiref current (A)": [1.0] * len(wavelengths)},
             index=wavelengths,
         )
 
@@ -461,7 +461,7 @@ class LiveMonitoringWavelengthChangeTests(unittest.TestCase):
         # detectable, not just coincidentally correct.
         return pd.DataFrame(
             {
-                "incident beam current (A)/intSi71889 current (A)": [
+                "incident beam current (A)/intSiref current (A)": [
                     1.0 + 0.1 * i for i in range(len(wavelengths))
                 ]
             },
@@ -631,7 +631,7 @@ class LiveMonitoringBiasResetOnEarlyFailureTests(unittest.TestCase):
         # raise KeyError before the loop (and thus before the loop's own
         # try/finally used to begin).
         df_incbeamcurr = pd.DataFrame(
-            {"incident beam current (A)/intSi71889 current (A)": [1.0]},
+            {"incident beam current (A)/intSiref current (A)": [1.0]},
             index=[600],
         )
 
@@ -661,7 +661,7 @@ class SimulatedHardwareBiasTests(unittest.TestCase):
 
     def _calibration_df(self, wavelengths):
         return pd.DataFrame(
-            {"incident beam current (A)/intSi71889 current (A)": [1.0] * len(wavelengths)},
+            {"incident beam current (A)/intSiref current (A)": [1.0] * len(wavelengths)},
             index=list(wavelengths),
         )
 

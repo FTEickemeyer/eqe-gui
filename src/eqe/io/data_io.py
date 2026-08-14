@@ -145,7 +145,7 @@ def save_data(
         df_ref_interpol = df_interpolate(df_ref, df.index)
         df["IPCE Si71889 (%)"] = df_ref_interpol.values
         df["incident beam current (A)"] = df["Current cell (A)"] / df["IPCE Si71889 (%)"]
-        df["incident beam current (A)/intSi71889 current (A)"] = (
+        df["incident beam current (A)/intSiref current (A)"] = (
             df["incident beam current (A)"] / df["Current ref (A)"]
         )
 
@@ -161,11 +161,11 @@ def save_data(
             [
                 "Current ref (A)",
                 "Current cell (A)",
-                "incident beam current (A)/intSi71889 current (A)",
+                "incident beam current (A)/intSiref current (A)",
             ]
         ].to_csv(fp_incbeamcurr)
 
         if debug:
-            df["incident beam current (A)/intSi71889 current (A)"].plot()
+            df["incident beam current (A)/intSiref current (A)"].plot()
 
     return fp_ipce
