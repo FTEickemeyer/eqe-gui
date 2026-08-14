@@ -289,14 +289,14 @@ def perform_measurement(
             "Wavelength (nm)": np.asarray(measured_wavelengths),
             "EQE (%)": np.asarray(IPCE_arr),
             "Integrated current (mA/cm2)": np.asarray(int_curr_arr),
-            "Current ref-chA (A)": np.asarray(signal_A_arr),
-            "Current cell-chB (A)": np.asarray(signal_B_arr),
+            "Current ref (A)": np.asarray(signal_A_arr),
+            "Current cell (A)": np.asarray(signal_B_arr),
         })
     else:
         df = pd.DataFrame({
             "Wavelength (nm)": np.asarray(measured_wavelengths),
-            "Current ref-chA (A)": np.asarray(signal_A_arr),
-            "Current cell-chB (A)": np.asarray(signal_B_arr),
+            "Current ref (A)": np.asarray(signal_A_arr),
+            "Current cell (A)": np.asarray(signal_B_arr),
         })
 
     df.set_index("Wavelength (nm)", inplace=True)

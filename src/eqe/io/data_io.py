@@ -129,8 +129,8 @@ def save_data(
     header = build_measurement_header(hardware=hardware, metadata=metadata, scan=scan, bias=bias)
 
     # Always include the raw reference/test-cell currents alongside EQE
-    # (previously the GUI's save path silently dropped "Current ref-chA
-    # (A)"/"Current cell-chB (A)").
+    # (previously the GUI's save path silently dropped "Current ref (A)"/
+    # "Current cell (A)").
     with open(fp_ipce, "w", newline="", encoding="utf-8") as f:
         f.write(header)
         df.to_csv(f)
@@ -144,9 +144,9 @@ def save_data(
     if calibration_measurement:
         df_ref_interpol = df_interpolate(df_ref, df.index)
         df["IPCE Siref (%)"] = df_ref_interpol.values
-        df["incident beam current (A)"] = df["Current cell-chB (A)"] / df["IPCE Siref (%)"]
+        df["incident beam current (A)"] = df["Current cell (A)"] / df["IPCE Siref (%)"]
         df["incident beam current (A)/intSiref current (A)"] = (
-            df["incident beam current (A)"] / df["Current ref-chA (A)"]
+            df["incident beam current (A)"] / df["Current ref (A)"]
         )
 
         calibration_dir = get_paths()["calibrations_dir"]
@@ -159,8 +159,8 @@ def save_data(
 
         df[
             [
-                "Current ref-chA (A)",
-                "Current cell-chB (A)",
+                "Current ref (A)",
+                "Current cell (A)",
                 "incident beam current (A)/intSiref current (A)",
             ]
         ].to_csv(fp_incbeamcurr)

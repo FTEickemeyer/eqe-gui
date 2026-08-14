@@ -167,7 +167,7 @@ class PerformMeasurementRoleAgnosticTests(unittest.TestCase):
 
         # Dark current must be subtracted by the engine (role-agnostic logic).
         expected_ref = reference_meter.value - reference_meter.dark_current
-        self.assertAlmostEqual(df["Current ref-chA (A)"].iloc[0], expected_ref)
+        self.assertAlmostEqual(df["Current ref (A)"].iloc[0], expected_ref)
 
     def test_descending_direction_scans_high_to_low(self):
         mono = FakeMonochromator()
