@@ -4,12 +4,51 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eqe-gui"
-version = "0.1.0"
-description = "EQE/IPCE measurement GUI"
+version = "0.2.0"
+description = "EQE/IPCE measurement GUI for photovoltaic devices"
+readme = "README.md"
 requires-python = ">=3.10"
+dependencies = [
+    "PySide6>=6.10,<7",
+    "numpy>=2.4,<3",
+    "pandas>=3.0,<4",
+    "matplotlib>=3.10,<4",
+    "pyserial>=3.5,<4",
+    "PyVISA>=1.16,<2",
+    "PyYAML>=6.0,<7",
+    "fte-analysis-libraries @ git+https://github.com/FTEickemeyer/FTE-analysis-libraries.git@6d17ae96e6a3a8b9a112aff2779e378518ef1bcb",
+]
+
+# Lets colleagues run the GUI as a plain command after installing
+# (`eqe`), instead of needing `python -m eqe`. Both keep working.
+[project.scripts]
+eqe = "eqe.app.gui_qt:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# Non-.py files the package needs at runtime (config defaults, the
+# reference-cell IPCE curve, the window icon). Listed explicitly rather
+# than "*.yaml" so a personal, gitignored config_local.yaml can never end
+# up bundled into a build even if one happens to exist on disk at build
+# time (e.g. building directly from a working copy instead of a fresh git
+# clone) -- see config/load_config.py for where per-machine config
+# actually lives.
+[tool.setuptools.package-data]
+"eqe.config" = ["config_default.yaml", "config_local_example.yaml"]
+"eqe.resources.calibration_defaults" = ["*.csv"]
+"eqe.app.assets" = ["*.ico"]
+
+# Belt-and-suspenders on top of the explicit list above: setuptools'
+# default auto-discovery of package data can still pick up files that
+# are merely *present* in a package directory at build time regardless
+# of the list above, so a personal config_local.yaml sitting next to
+# config_default.yaml (as it does on every dev checkout, including this
+# one) needs an explicit exclude too, or a build run directly from a
+# working copy (as opposed to a clean git clone, which never has this
+# gitignored file to begin with) would bundle it.
+[tool.setuptools.exclude-package-data]
+"eqe.config" = ["config_local.yaml"]

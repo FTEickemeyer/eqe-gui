@@ -12,88 +12,115 @@ external Si71889 reference cell — see [Calibration](#calibration)).
 - **EQE Scan** — sweeps wavelength, computes calibrated EQE, plots live as it measures
 - **Live Monitoring** — holds a fixed wavelength and streams EQE/current vs. time
 - **Electrical Control** — applies SMU bias voltage with compliance current limiting
+- **Calibration measurement** — produces the incident-beam calibration a regular scan
+  needs (see [Calibration](#calibration))
 - **Simulation mode** — runs the full GUI/measurement pipeline against simulated
   instruments, no hardware required (useful for development or demos)
 
 See [CLAUDE.md](CLAUDE.md) for the internal architecture (GUI → controller →
-measurement engine → instruments) and the active development roadmap.
+measurement engine → instruments) and the active development roadmap. For a
+step-by-step guide to actually running measurements (aimed at lab users, not
+developers), see the printable
+[User Manual](docs/EQE_GUI_User_Manual.docx).
 
 ## Requirements
 
 - Windows (the monochromator/SMU drivers assume Windows serial/GPIB stacks)
 - Python >= 3.10
-- For real measurements: a Keithley SMU reachable via GPIB (PyVISA) and an Oriel
-  Cornerstone130 monochromator on a serial port. Simulation mode needs neither.
+- For real measurements: a Keithley 2000 + 2400 (or 2600) reachable via PyVISA/serial,
+  a VISA runtime installed for PyVISA to talk to them (e.g. NI-VISA), and an Oriel
+  Cornerstone130 monochromator on a serial port. Simulation mode needs none of this.
 
 ## Installation
+
+### For regular use (a new Windows account on the lab PC, a colleague's machine, etc.)
+
+This is a normal pip package — install it straight from GitHub, no manual clone
+needed:
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install git+https://github.com/FTEickemeyer/eqe-gui.git
+```
+
+That pulls in every dependency (PySide6, numpy, pandas, matplotlib, PyVISA,
+pyserial, PyYAML, and `fte-analysis-libraries`) automatically — no separate
+`requirements.txt` step needed. It also installs an `eqe` command, so you can just
+run:
+
+```bash
+eqe
+```
+
+from anywhere the venv is active. (`python -m eqe` still works too.) To upgrade to
+the latest version later, run the same `pip install git+...` command again, or add
+`--upgrade`.
+
+> **Gotcha:** a venv is not relocatable by copying files. `.venv/Scripts/activate.bat`
+> and `.venv/pyvenv.cfg` bake in the *absolute path* the venv was created at. If you
+> ever copy a venv folder to a different path or a different Windows user account,
+> `activate` will silently put the *old* location's `Scripts` folder on `PATH`, and
+> `where python`/`where eqe` will resolve to the old account's interpreter even while
+> your prompt correctly shows the new folder. Fix: create a fresh venv in the new
+> location/account (`python -m venv .venv`) and `pip install` into that — never copy
+> an existing `.venv` between accounts or machines.
+
+### For development (working on the code itself)
 
 ```bash
 git clone https://github.com/FTEickemeyer/eqe-gui.git
 cd eqe-gui
 python -m venv .venv
 .venv\Scripts\activate
-
-pip install -r requirements.txt
 pip install -e .
 ```
 
-`pip install -e .` is the step that makes the `eqe` package resolve to the code in
-your local checkout, in editable mode (uses `pyproject.toml`). `requirements.txt`
-covers everything else (pinned third-party dependencies).
+`pip install -e .` resolves the `eqe` package to your local checkout in editable
+mode, so code changes take effect immediately without reinstalling — same
+dependency list as above, from `pyproject.toml`. (`requirements.txt` is a pinned
+snapshot of a known-working environment, kept for reference/reproducibility; it's
+not needed for a normal install.)
 
-> **Gotcha:** a venv is not relocatable by copying files. `.venv/Scripts/activate.bat`
-> and `.venv/pyvenv.cfg` bake in the *absolute path* the venv was created at. If you
-> ever copy this project folder (or its `.venv`) to a different path or a different
-> Windows user account, `activate` will silently put the *old* location's `Scripts`
-> folder on `PATH`, and `where python` will resolve to the old account's interpreter
-> even while your prompt correctly shows the new folder. Symptoms: `where python`
-> pointing at someone else's profile, or import errors/tracebacks referencing a path
-> you don't recognize. Fix: delete `.venv` and recreate it from scratch in the new
-> location (`python -m venv .venv`), then repeat the `pip install` steps above —
-> don't copy an existing `.venv` between accounts or machines.
+## Configuration
 
-## Configuration — do this on every new machine/account
+Most of the time **no configuration is needed** — `config_default.yaml` (shipped
+with the package) already has paths that work for any account (they use `~`, i.e.
+your own home directory) and instrument ports that match this lab's PC. Just install
+and run.
 
-Settings live in two layered YAML files under `src/eqe/config/`:
+Create a `config_local.yaml` only if you want to override something — e.g. share
+calibration files across colleagues' accounts instead of each keeping their own, pin
+a specific incident-beam calibration file, or point at different instrument ports on
+a different PC. Two locations are checked, in this order:
 
-| File | Purpose | Tracked in git? |
-|---|---|---|
-| `config_default.yaml` | Repo-wide defaults (paths use `~`, generic instrument addresses) | Yes |
-| `config_local.yaml` | Your machine's real paths, instrument addresses, active calibration file | **No — gitignored** |
+| Location | When to use it |
+|---|---|
+| `~/.eqe/config_local.yaml` (i.e. `C:\Users\<you>\.eqe\config_local.yaml`) | **Recommended for a normal pip install.** Works regardless of where the package ended up on disk. |
+| `config_local.yaml` next to `config_default.yaml` inside the installed package | Only reachable for an editable dev install (`pip install -e .` from a source checkout) — kept for backward compatibility with that workflow. |
 
-`config_local.yaml` does not exist after a fresh clone. Create it by copying the
-template and filling in values for your account:
+Whichever one exists is used (the first one wins if both do); see
+`config/load_config.py`. Start from the template:
 
 ```bash
-cp src/eqe/config/config_local_example.yaml src/eqe/config/config_local.yaml
+mkdir %USERPROFILE%\.eqe
+copy src\eqe\config\config_local_example.yaml %USERPROFILE%\.eqe\config_local.yaml
 ```
 
-Then edit it:
-
-```yaml
-paths:
-  measurements_dir: C:/Users/<you>/Documents/EQE/measurements
-  calibrations_dir: C:/Users/<you>/Documents/EQE/calibrations
-  logs_dir: C:/Users/<you>/AppData/Local/eqe/logs
-
-calibration:
-  active_incident_beam_file: <name-of-your-current-incident-beam-calibration>.csv
-```
-
-Values in `config_local.yaml` override the matching keys in `config_default.yaml`
-(see `load_config.py`); anything you don't set there falls back to the default.
-
-Because this file is gitignored, **it will never travel with the repo** — every new
-checkout, machine, or user account needs its own copy with paths that actually exist
-for that account. Skipping this step doesn't crash the app outright, but it will
-read/write measurement and calibration data under whatever path is currently in
-`config_local.yaml`, which may belong to a different user entirely.
+(For a real pip install rather than a dev checkout, grab
+[`config_local_example.yaml`](src/eqe/config/config_local_example.yaml) from GitHub
+instead of `src\...`, since there's no local clone to copy it from.) Then edit it —
+see the comments in the template for what's worth overriding and why. Values in
+`config_local.yaml` override the matching keys in `config_default.yaml`; anything you
+don't set falls back to the default.
 
 ## Running
 
 ```bash
-python -m eqe
+eqe
 ```
+
+(or `python -m eqe` — both work; see [Installation](#installation).)
 
 To run without hardware, enable simulation mode from the **Session** panel in the
 GUI — this swaps in `SimulatedSMU`/`SimulatedMonochromator` and lets you exercise
@@ -165,10 +192,13 @@ means updating both:
 1. Get the new cell's certified IPCE curve into the same two-column format as
    `71889_L_IPCE_NIST.csv` (`Wavelength (nm), IPCE (%)`), and save it into
    `src/eqe/resources/calibration_defaults/`, named after the new cell (e.g.
-   `SiXXXXX_IPCE_<source>.csv`).
+   `SiXXXXX_IPCE_<source>.csv`). This lives inside the package itself, so it's a code
+   change — a maintainer needs to add the file and cut a new release/commit for a
+   pip-installed colleague to pick it up (`pip install --upgrade git+...`).
 2. Point `calibration.reference_cell_file` at that new filename — in
-   `config_default.yaml` if this is now the standing default, or in your (gitignored)
-   `config_local.yaml` to override it locally only.
+   `config_default.yaml` if this is now the standing default, or in your
+   `config_local.yaml` (see [Configuration](#configuration)) to override it locally
+   only.
 3. Run a new calibration measurement (see above) with the new cell physically
    installed. Use the new cell's ID as the sample name (e.g. `SiXXXXX`) so the
    generated `incbeamcurr_SiXXXXX_*.csv` filename stays self-describing. Saving it
