@@ -91,41 +91,46 @@ def perform_measurement(
     mono.shutter(True)
 
     # ----------------------------------------
-    # The test-cell source output must be on to take any current reading
-    # (even an unbiased 0 V one) -- unconditionally re-enable it here so a
-    # previous scan's end-of-run output_off() cleanup doesn't leave the
-    # next scan's first reading waiting on a source that's off.
+    # Everything from here on is wrapped in the same try/finally as the
+    # measurement loop below: bias can be applied a few lines down, and
+    # the finally block's reset-to-0V must run no matter what happens
+    # afterward -- not just for exceptions raised inside the loop itself.
     # ----------------------------------------
     try:
-        test_meter.output_on()
-    except Exception as e:
-        emit_status(f"WARNING: Failed to enable test-cell output: {e}")
-
-    # ----------------------------------------
-    # Apply bias (initial implementation)
-    # ----------------------------------------
-    if bias_enabled:
+        # The test-cell source output must be on to take any current
+        # reading (even an unbiased 0 V one) -- unconditionally
+        # re-enable it here so a previous scan's end-of-run
+        # output_off() cleanup doesn't leave the next scan's first
+        # reading waiting on a source that's off.
         try:
-            test_meter.set_bias_voltage(bias_voltage)
-            test_meter.set_compliance_current(compliance_current)
-            emit_status(f"SMU bias applied: {bias_voltage:.3f} V")
-            emit_status(f"Compliance current: {compliance_current:.3e} A")
+            test_meter.output_on()
         except Exception as e:
-            emit_status(f"WARNING: Failed to apply bias: {e}")
+            emit_status(f"WARNING: Failed to enable test-cell output: {e}")
 
-    wavelengths = np.arange(nm_lim[0], nm_lim[1] + delta_nm, delta_nm)
-    if str(direction).strip().lower() == "descending":
-        wavelengths = wavelengths[::-1]
+        # ----------------------------------------
+        # Apply bias (initial implementation)
+        # ----------------------------------------
+        if bias_enabled:
+            try:
+                test_meter.set_bias_voltage(bias_voltage)
+                test_meter.set_compliance_current(compliance_current)
+                emit_status(f"SMU bias applied: {bias_voltage:.3f} V")
+                emit_status(f"Compliance current: {compliance_current:.3e} A")
+            except Exception as e:
+                emit_status(f"WARNING: Failed to apply bias: {e}")
 
-    signal_A_arr = []
-    signal_B_arr = []
-    IPCE_arr = []
-    measured_wavelengths = []
-    int_curr_arr = []
+        wavelengths = np.arange(nm_lim[0], nm_lim[1] + delta_nm, delta_nm)
+        if str(direction).strip().lower() == "descending":
+            wavelengths = wavelengths[::-1]
 
-    trapz_fn = getattr(np, "trapz", np.trapezoid)
+        signal_A_arr = []
+        signal_B_arr = []
+        IPCE_arr = []
+        measured_wavelengths = []
+        int_curr_arr = []
 
-    try:
+        trapz_fn = getattr(np, "trapz", np.trapezoid)
+
         for nm in wavelengths:
             if should_stop():
                 emit_status("Measurement stopped.")
@@ -372,25 +377,6 @@ def perform_live_monitoring(
 
     emit_status(f"Live monitoring at {nm:.0f} nm")
 
-    # See perform_measurement(): the test-cell source output must be on to
-    # take any current reading, even an unbiased 0 V one.
-    try:
-        test_meter.output_on()
-    except Exception as e:
-        emit_status(f"WARNING: Failed to enable test-cell output: {e}")
-
-    if bias_enabled:
-        emit_status(f"Bias enabled: {bias_voltage:.3f} V")
-        try:
-            test_meter.set_bias_voltage(bias_voltage)
-            test_meter.set_compliance_current(compliance_current)
-            emit_status(f"SMU bias applied: {bias_voltage:.3f} V")
-            emit_status(f"Compliance current: {compliance_current:.3e} A")
-        except Exception as e:
-            emit_status(f"WARNING: Failed to apply bias: {e}")
-    else:
-        emit_status("Bias disabled")
-
     def move_to(target_nm):
         mono.shutter(True)
         mono.goto_nm(target_nm, on_status=emit_status)
@@ -407,18 +393,45 @@ def perform_live_monitoring(
                 "Use a wavelength present in the calibration table."
             )
 
-    move_to(nm)
-    incbeamcurr_div_intSirefcurrent = lookup_ratio(nm)
-
-    t0 = time.time()
-
-    time_arr = []
-    wavelength_arr = []
-    eqe_arr = []
-    ref_current_arr = []
-    cell_current_arr = []
-
+    # ----------------------------------------
+    # Everything from here on is wrapped in the same try/finally as the
+    # monitoring loop below: bias can be applied a few lines down, and
+    # the finally block's reset-to-0V must run no matter what happens
+    # afterward -- including e.g. lookup_ratio() raising because the
+    # chosen wavelength isn't in the calibration table, which previously
+    # happened before any try/finally was in scope.
+    # ----------------------------------------
     try:
+        # See perform_measurement(): the test-cell source output must be
+        # on to take any current reading, even an unbiased 0 V one.
+        try:
+            test_meter.output_on()
+        except Exception as e:
+            emit_status(f"WARNING: Failed to enable test-cell output: {e}")
+
+        if bias_enabled:
+            emit_status(f"Bias enabled: {bias_voltage:.3f} V")
+            try:
+                test_meter.set_bias_voltage(bias_voltage)
+                test_meter.set_compliance_current(compliance_current)
+                emit_status(f"SMU bias applied: {bias_voltage:.3f} V")
+                emit_status(f"Compliance current: {compliance_current:.3e} A")
+            except Exception as e:
+                emit_status(f"WARNING: Failed to apply bias: {e}")
+        else:
+            emit_status("Bias disabled")
+
+        move_to(nm)
+        incbeamcurr_div_intSirefcurrent = lookup_ratio(nm)
+
+        t0 = time.time()
+
+        time_arr = []
+        wavelength_arr = []
+        eqe_arr = []
+        ref_current_arr = []
+        cell_current_arr = []
+
         while not should_stop():
 
             if get_target_wavelength is not None:

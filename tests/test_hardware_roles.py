@@ -571,6 +571,44 @@ class LiveMonitoringWavelengthChangeTests(unittest.TestCase):
         self.assertEqual(mono.position, 550)
 
 
+class LiveMonitoringBiasResetOnEarlyFailureTests(unittest.TestCase):
+    """
+    Safety requirement: whenever bias has been applied, it must be reset
+    to 0V afterward -- including when perform_live_monitoring() fails
+    before ever entering its measurement loop (e.g. an invalid starting
+    wavelength), not just failures during the loop itself.
+    """
+
+    def test_bias_is_reset_if_initial_wavelength_lookup_fails(self):
+        mono = FakeMonochromator()
+        reference_meter = FakeCurrentMeter()
+        test_meter = FakeBiasCurrentMeter()
+        hardware = MeasurementHardware(
+            reference_meter=reference_meter, test_meter=test_meter, monochromator=mono
+        )
+
+        # Calibration table does not contain 550nm -- lookup_ratio() must
+        # raise KeyError before the loop (and thus before the loop's own
+        # try/finally used to begin).
+        df_incbeamcurr = pd.DataFrame(
+            {"incident beam current (A)/intSiref current (A)": [1.0]},
+            index=[600],
+        )
+
+        with self.assertRaises(KeyError):
+            perform_live_monitoring(
+                hardware,
+                df_incbeamcurr,
+                wavelength_nm=550,
+                bias_enabled=True,
+                bias_voltage=0.4,
+                stop_requested=lambda: False,
+            )
+
+        self.assertEqual(test_meter.bias_voltage, 0.0)
+        self.assertFalse(test_meter.output_enabled)
+
+
 class SimulatedHardwareBiasTests(unittest.TestCase):
     """
     Exercises the *real* simulated hardware path (factory.initialize_system
