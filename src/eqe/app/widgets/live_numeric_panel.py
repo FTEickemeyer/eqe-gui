@@ -5,8 +5,11 @@ Displays real-time measurement values during EQE measurements.
 
 Initial values displayed:
 - EQE (%)
-- test cell current
-- reference cell current
+- test cell current (whatever's in the sample position -- the sample
+  itself normally, or the external Si71889 cell during a calibration
+  measurement)
+- reference cell current (always the internal reference cell, read via
+  reference_meter regardless of mode -- never the external Si71889 cell)
 - integrated current
 
 Later extensions:

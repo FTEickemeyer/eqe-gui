@@ -17,6 +17,17 @@ def get_reference_cell_path(filename: str) -> Path:
 
 
 def open_calibration(nm_lim, calibration_measurement, debug=False):
+    """
+    Load the two calibration inputs. Not to be confused with each other:
+
+    - `reference_cell_file` / df_ref: the *external* Si71889 reference
+      cell's own certified IPCE curve, used only when producing a new
+      calibration (calibration_measurement=True).
+    - `active_incident_beam_file` / df_incbeamcurr: the incident-beam
+      calibration, giving the ratio against the *internal* reference
+      cell's current (Siref/intSiref, always read via reference_meter)
+      used for every regular EQE scan.
+    """
     config = load_config()
     paths = get_paths()
 
@@ -28,14 +39,14 @@ def open_calibration(nm_lim, calibration_measurement, debug=False):
     fp_ref_cell = get_reference_cell_path(reference_cell_file)
     if not fp_ref_cell.exists():
         raise FileNotFoundError(
-            f"Reference cell file not found: {fp_ref_cell}"
+            f"Si71889 reference cell file not found: {fp_ref_cell}"
         )
 
     df_ref = pd.read_csv(fp_ref_cell).set_index("Wavelength (nm)").squeeze()
 
     if debug:
         df_ref.plot()
-        plt.title("Reference cell")
+        plt.title("Si71889 reference cell")
         plt.ylabel("IPCE (%)")
         plt.show()
 

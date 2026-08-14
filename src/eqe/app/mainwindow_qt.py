@@ -141,9 +141,10 @@ class MainWindow(QMainWindow):
 
         # Last completed measurement dataframe, used by manual Save
         self._last_result_df = None
-        # Reference-cell IPCE curve and calibration flag from the run
-        # that produced _last_result_df, needed at save time for a
-        # calibration measurement (see _on_start()/_save_last_result()).
+        # Si71889 (external calibration cell) IPCE curve and calibration
+        # flag from the run that produced _last_result_df, needed at save
+        # time for a calibration measurement (see
+        # _on_start()/_save_last_result()).
         self._last_df_ref = None
         self._active_calibration_measurement = False
 
@@ -163,8 +164,8 @@ class MainWindow(QMainWindow):
         self.session_panel.user_changed.connect(self._update_calibration_visibility)
         self._update_calibration_visibility(self.session_panel.get_user())
 
-        # Pre-fill the sample name with the reference cell's identifier
-        # when starting a calibration measurement.
+        # Pre-fill the sample name with the Si71889 (external calibration
+        # cell) identifier when starting a calibration measurement.
         self.calibration_panel.calibration_measurement_toggled.connect(
             self._on_calibration_toggled
         )
@@ -182,8 +183,8 @@ class MainWindow(QMainWindow):
 
     def _on_calibration_toggled(self, checked):
         """
-        Pre-fill the sample name with the reference cell's identifier
-        when "Calibration measurement" is checked.
+        Pre-fill the sample name with the Si71889 (external calibration
+        cell) identifier when "Calibration measurement" is checked.
         """
 
         if checked:
@@ -322,8 +323,9 @@ class MainWindow(QMainWindow):
             )
 
             # Remembered for _save_last_result(): a calibration
-            # measurement's save path needs the reference-cell IPCE
-            # curve (df_ref) to compute the new incident-beam calibration
+            # measurement's save path needs the Si71889 (external
+            # calibration cell) IPCE curve (df_ref) to compute the new
+            # incident-beam calibration
             # file, and must use the same calibration_measurement flag
             # the run was actually started with, not a possibly-changed
             # checkbox state at save time.
@@ -954,10 +956,15 @@ class MainWindow(QMainWindow):
 
         if is_calibration:
             # No EQE is computed for a calibration measurement -- show
-            # the raw reference/test-cell currents instead.
+            # the raw currents instead. Label the two axes by which
+            # physical cell each one actually is -- "reference cell"
+            # alone is ambiguous between the internal cell (always read
+            # via reference_meter) and the external Si71889 calibration
+            # cell (installed in the sample position only during a
+            # calibration run, read via test_meter), so never mix them up.
             self.eqe_plot_widget.ax.set_xlabel("Wavelength (nm)")
-            self.eqe_plot_widget.ax.set_ylabel("Reference cell current (A)")
-            self.eqe_plot_widget.ax2.set_ylabel("Test cell current (A)")
+            self.eqe_plot_widget.ax.set_ylabel("Internal reference cell current (A)")
+            self.eqe_plot_widget.ax2.set_ylabel("Si71889 reference cell current (A)")
             self.eqe_plot_widget.ax.set_title("Live currents")
             self.live_numeric_panel.set_eqe_visible(False)
             self.live_numeric_panel.set_integrated_current_visible(False)

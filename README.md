@@ -2,9 +2,10 @@
 
 A PySide6 desktop application for measuring External Quantum Efficiency (EQE) / IPCE
 of photovoltaic devices. It drives a Keithley SMU and an Oriel Cornerstone130
-monochromator to sweep wavelength (or hold a fixed wavelength) while reading cell and
-reference-diode current, then computes calibrated EQE against a reference cell and an
-incident-beam calibration.
+monochromator to sweep wavelength (or hold a fixed wavelength) while reading cell
+current alongside an internal reference-diode current, then computes calibrated EQE
+against an incident-beam calibration (itself produced periodically using a separate,
+external Si71889 reference cell — see [Calibration](#calibration)).
 
 ## What it does
 
@@ -100,36 +101,48 @@ scan mode, live mode, and saving without any instrument connected.
 
 ## Calibration
 
-- The reference-cell IPCE curve ships with the repo
-  (`src/eqe/resources/calibration_defaults/`) and is set via
+Two different reference cells are involved, and they should never be confused:
+
+- **Internal reference cell** ("Siref"/"intSiref" in the code) — built into the
+  system, monitors the monochromatic light via a beamsplitter, and is read
+  continuously for *every* measurement (scan, live, or calibration).
+- **External Si71889 reference cell** — a separate, physically swappable cell with
+  its own certified IPCE curve, temporarily installed in the sample position only
+  while running a calibration measurement.
+
+Config keys for each:
+
+- The Si71889 cell's certified IPCE curve ships with the repo
+  (`src/eqe/resources/calibration_defaults/71889_L_IPCE_NIST.csv`) and is set via
   `calibration.reference_cell_file`.
 - The **incident-beam calibration** (`calibration.active_incident_beam_file`) is
-  machine/setup-specific — it's a measurement you produce yourself and must live in
-  `calibrations_dir`. There is no default; scans will fail with a clear
+  machine/setup-specific — it's a measurement you produce yourself (see below) and
+  must live in `calibrations_dir`. There is no default; scans will fail with a clear
   `FileNotFoundError` until this is set correctly.
 
 ### Running a calibration measurement
 
-The incident-beam calibration is produced by scanning with the reference cell
-installed instead of the sample:
+The incident-beam calibration is produced by scanning with the **Si71889** cell
+installed instead of the sample (the internal reference cell stays in place and is
+read as usual):
 
-1. Physically install the reference cell (the one matching
+1. Physically install the Si71889 reference cell (the one matching
    `calibration.reference_cell_file`) in place of the sample.
 2. Check **"Calibration measurement"** in the Calibration / Saving panel.
 3. Start a scan (Standard EQE mode) — a calibration scan always covers the full
    350–1170 nm range, regardless of the Start/Stop fields.
 4. Click **Save** once it finishes. This writes both the usual measurement file
-   (raw reference/cell currents only, no EQE) and a new `incbeamcurr_*.csv` into
-   `calibrations_dir`.
+   (raw internal-reference/Si71889 currents only, no EQE) and a new
+   `incbeamcurr_*.csv` into `calibrations_dir`.
 5. Point `calibration.active_incident_beam_file` in `config_local.yaml` at that new
    filename to make it the active calibration.
 
-### Switching to a different reference cell
+### Switching to a different external reference cell
 
 `calibration.reference_cell_file` and `calibration.active_incident_beam_file` cover
-two different things — the reference cell's own certified IPCE curve vs. a
-calibration *derived* from measuring with it — so replacing the physical reference
-cell means updating both:
+two different things — the Si71889 cell's own certified IPCE curve vs. a calibration
+*derived* from measuring with it — so replacing the physical external reference cell
+means updating both:
 
 1. Get the new cell's certified IPCE curve into the same two-column format as
    `71889_L_IPCE_NIST.csv` (`Wavelength (nm), IPCE (%)`), and save it into
@@ -142,6 +155,9 @@ cell means updating both:
    installed. Use the new cell's ID as the sample name (e.g. `SiXXXXX`) so the
    generated `incbeamcurr_SiXXXXX_*.csv` filename stays self-describing.
 4. Point `calibration.active_incident_beam_file` at that new file.
+
+This does **not** involve the internal reference cell in any way -- that one is a
+fixed part of the instrument, not something you swap or reconfigure.
 
 ## Project layout
 
