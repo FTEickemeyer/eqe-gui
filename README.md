@@ -108,6 +108,41 @@ scan mode, live mode, and saving without any instrument connected.
   `calibrations_dir`. There is no default; scans will fail with a clear
   `FileNotFoundError` until this is set correctly.
 
+### Running a calibration measurement
+
+The incident-beam calibration is produced by scanning with the reference cell
+installed instead of the sample:
+
+1. Physically install the reference cell (the one matching
+   `calibration.reference_cell_file`) in place of the sample.
+2. Check **"Calibration measurement"** in the Calibration / Saving panel.
+3. Start a scan (Standard EQE mode) — a calibration scan always covers the full
+   350–1170 nm range, regardless of the Start/Stop fields.
+4. Click **Save** once it finishes. This writes both the usual measurement file
+   (raw reference/cell currents only, no EQE) and a new `incbeamcurr_*.csv` into
+   `calibrations_dir`.
+5. Point `calibration.active_incident_beam_file` in `config_local.yaml` at that new
+   filename to make it the active calibration.
+
+### Switching to a different reference cell
+
+`calibration.reference_cell_file` and `calibration.active_incident_beam_file` cover
+two different things — the reference cell's own certified IPCE curve vs. a
+calibration *derived* from measuring with it — so replacing the physical reference
+cell means updating both:
+
+1. Get the new cell's certified IPCE curve into the same two-column format as
+   `71889_L_IPCE_NIST.csv` (`Wavelength (nm), IPCE (%)`), and save it into
+   `src/eqe/resources/calibration_defaults/`, named after the new cell (e.g.
+   `SiXXXXX_IPCE_<source>.csv`).
+2. Point `calibration.reference_cell_file` at that new filename — in
+   `config_default.yaml` if this is now the standing default, or in your (gitignored)
+   `config_local.yaml` to override it locally only.
+3. Run a new calibration measurement (see above) with the new cell physically
+   installed. Use the new cell's ID as the sample name (e.g. `SiXXXXX`) so the
+   generated `incbeamcurr_SiXXXXX_*.csv` filename stays self-describing.
+4. Point `calibration.active_incident_beam_file` at that new file.
+
 ## Project layout
 
 ```
