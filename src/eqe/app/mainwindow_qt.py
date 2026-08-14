@@ -51,6 +51,7 @@ from eqe.app.widgets.session_panel import SessionPanel
 from eqe.app.widgets.metadata_panel import MetadataPanel
 from eqe.app.widgets.scan_panel import ScanPanel
 from eqe.app.widgets.wavelength_setting_panel import WavelengthSettingPanel
+from eqe.app.widgets.calibration_panel import CalibrationPanel
 from eqe.app.widgets.log_panel import LogPanel
 from eqe.app.widgets.bias_panel import BiasPanel
 from eqe.app.widgets.live_numeric_panel import LiveNumericPanel
@@ -132,7 +133,12 @@ class MainWindow(QMainWindow):
 
         # Last completed measurement dataframe, used by manual Save
         self._last_result_df = None
-        
+        # Reference-cell IPCE curve and calibration flag from the run
+        # that produced _last_result_df, needed at save time for a
+        # calibration measurement (see _on_start()/_save_last_result()).
+        self._last_df_ref = None
+        self._active_calibration_measurement = False
+
         # measurement controller
         self.controller = MeasurementController()
 
@@ -193,6 +199,16 @@ class MainWindow(QMainWindow):
                 wl_stop = int(self.scan_panel.stop_nm_spin.value())
                 interval = int(self.scan_panel.step_nm_spin.value())
 
+            # Calibration measurement is a scan-only concept (records raw
+            # currents to produce a new incident-beam calibration file);
+            # the checkbox is hidden for live modes (SECTION_CALIBRATION),
+            # but its state isn't reset on mode switch, so ignore it
+            # explicitly here too rather than relying on that alone.
+            is_calibration = (
+                not is_live
+                and self.calibration_panel.get_values()["calibration_measurement"]
+            )
+
             # --------------------------------------------------
             # Build legacy MeasurementParams object
             # --------------------------------------------------
@@ -202,7 +218,7 @@ class MainWindow(QMainWindow):
                 wl_start=wl_start,
                 wl_stop=wl_stop,
                 interval=interval,
-                calibration_measurement=False,
+                calibration_measurement=is_calibration,
                 show_raw=False,
                 save_raw=False,
                 stop_when_zero=False,
@@ -256,11 +272,20 @@ class MainWindow(QMainWindow):
             # --------------------------------------------------
             # Load calibration
             # --------------------------------------------------
-            df_incbeamcurr, _df_ref = open_calibration(
+            df_incbeamcurr, df_ref = open_calibration(
                 nm_lim,
                 params.calibration_measurement,
                 debug=False,
             )
+
+            # Remembered for _save_last_result(): a calibration
+            # measurement's save path needs the reference-cell IPCE
+            # curve (df_ref) to compute the new incident-beam calibration
+            # file, and must use the same calibration_measurement flag
+            # the run was actually started with, not a possibly-changed
+            # checkbox state at save time.
+            self._last_df_ref = df_ref
+            self._active_calibration_measurement = params.calibration_measurement
 
             # --------------------------------------------------
             # Start measurement
@@ -335,15 +360,12 @@ class MainWindow(QMainWindow):
             measurements_dir = Path(get_paths()["measurements_dir"])
             session_dir = create_user_directory(measurements_dir, user_name)
 
-            # For now:
-            # - normal EQE measurement
-            # - no reference dataframe needed
             fp = save_data(
                 df=self._last_result_df,
-                df_ref=None,
+                df_ref=self._last_df_ref,
                 sample_name=sample_name,
                 user_dir=session_dir,
-                calibration_measurement=False,
+                calibration_measurement=self._active_calibration_measurement,
                 fig=self.eqe_plot_widget.figure,
                 hardware=self.controller.hardware,
                 metadata=metadata,
@@ -467,10 +489,16 @@ class MainWindow(QMainWindow):
             return
 
         # Guard against missing values
-        if wavelength is None or eqe is None:
+        if wavelength is None:
             self.log_panel.append(
                 f"Incomplete point_acquired payload: args={args}, kwargs={kwargs}"
             )
+            return
+
+        if eqe is None:
+            # Expected during a calibration measurement: EQE isn't
+            # computed (only raw currents are recorded), so there's
+            # nothing to plot/readout for this point -- not an error.
             return
 
         # Forward numeric update safely to the GUI thread
@@ -738,7 +766,8 @@ class MainWindow(QMainWindow):
         # Calibration and saving
         self.calibration_group = QGroupBox("Calibration / Saving")
         self.calibration_group.setLayout(QVBoxLayout())
-        self.calibration_group.layout().addWidget(QLabel("Calibration panel placeholder"))
+        self.calibration_panel = CalibrationPanel()
+        self.calibration_group.layout().addWidget(self.calibration_panel)
         setup_layout.addWidget(self.calibration_group)
 
         # Advanced acquisition settings

@@ -37,12 +37,16 @@ class FakeMonochromator:
     def __init__(self):
         self.position = None
         self.shutter_closed = None
+        # Every position visited, in order -- lets tests distinguish "moved
+        # through X" from "ended up at X by coincidence".
+        self.history = []
 
     def shutter(self, close):
         self.shutter_closed = close
 
     def goto_nm(self, nm, on_status=None, wait=True):
         self.position = nm
+        self.history.append(nm)
 
 
 class FakeCurrentMeter(CurrentMeter):
@@ -493,10 +497,14 @@ class LiveMonitoringWavelengthChangeTests(unittest.TestCase):
             get_target_wavelength=get_target_wavelength,
         )
 
-        # The monochromator must have ended up at the changed-to
-        # wavelength, and the calibration ratio used for the last
-        # readings must be the one for 600 nm, not stale from 550 nm.
-        self.assertEqual(mono.position, 600)
+        # The monochromator must have moved to the changed-to wavelength
+        # during the run (and the calibration ratio used for the last
+        # readings must be the one for 600 nm, not stale from 550 nm --
+        # covered by test_wavelength_change_moves_mono_and_updates_calibration's
+        # sibling test on the returned DataFrame). It's parked back at
+        # 550 nm once finished (see test_returns_monochromator_to_550nm_when_finished),
+        # so check the move happened rather than the final position.
+        self.assertIn(600, mono.history)
 
     def test_returns_time_series_dataframe_including_wavelength_changes(self):
         """
@@ -564,6 +572,38 @@ class LiveMonitoringWavelengthChangeTests(unittest.TestCase):
             hardware,
             df_incbeamcurr,
             wavelength_nm=550,
+            stop_requested=stop_requested,
+            update_interval_s=0,
+        )
+
+        self.assertEqual(mono.position, 550)
+
+    def test_returns_monochromator_to_550nm_when_finished(self):
+        """
+        Measuring at a wavelength other than 550nm must still leave the
+        monochromator parked at 550nm afterward, matching
+        perform_measurement()'s behavior (not just coincidentally already
+        there, as the other tests in this class start at 550nm).
+        """
+        mono = FakeMonochromator()
+        reference_meter = FakeCurrentMeter(value=1e-6)
+        test_meter = FakeBiasCurrentMeter(value=2e-6)
+        hardware = MeasurementHardware(
+            reference_meter=reference_meter, test_meter=test_meter, monochromator=mono
+        )
+
+        df_incbeamcurr = self._calibration_df([700])
+
+        calls = {"n": 0}
+
+        def stop_requested():
+            calls["n"] += 1
+            return calls["n"] > 2
+
+        perform_live_monitoring(
+            hardware,
+            df_incbeamcurr,
+            wavelength_nm=700,
             stop_requested=stop_requested,
             update_interval_s=0,
         )

@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal
 
 # Import mode labels from the shared model definition
-from eqe.app.qt_models import MODE_LABELS
+from eqe.app.qt_models import MODE_LABELS, LOCKIN_EQE_BG, LOCKIN_LIVE_EQE
 
 
 class SessionPanel(QWidget):
@@ -63,6 +63,7 @@ class SessionPanel(QWidget):
 
         self.user_edit.textChanged.connect(self.user_changed.emit)
         self.user_edit.textChanged.connect(self._update_simulation_visibility)
+        self.user_edit.textChanged.connect(self._update_mode_combo_for_user)
 
         # --------------------------------------------------
         # Measurement mode selector
@@ -72,9 +73,9 @@ class SessionPanel(QWidget):
 
         self.mode_combo = QComboBox()
 
-        # Populate combo box with display labels
-        for mode_key, label in MODE_LABELS.items():
-            self.mode_combo.addItem(label, mode_key)
+        # Lock-in modes aren't implemented yet -- keep them out of the
+        # dropdown for normal use; populated once the user field is known.
+        self._populate_mode_combo()
 
         layout.addWidget(self.mode_combo)
 
@@ -126,16 +127,52 @@ class SessionPanel(QWidget):
         # Push widgets to the left
         layout.addStretch()
 
-    # Users for whom the simulation controls are shown (development use
-    # only). Case-insensitive.
-    _SIMULATION_VISIBLE_USERS = {"felix"}
+    # Users for whom development-only controls (simulation, unimplemented
+    # modes) are shown. Case-insensitive.
+    _DEVELOPER_USERS = {"felix"}
 
-    def _update_simulation_visibility(self, user_text):
-        visible = user_text.strip().lower() in self._SIMULATION_VISIBLE_USERS
+    # Modes not implemented yet -- excluded from the dropdown unless the
+    # user field identifies a developer (see _DEVELOPER_USERS).
+    _UNIMPLEMENTED_MODES = {LOCKIN_EQE_BG, LOCKIN_LIVE_EQE}
+
+    def _is_developer_user(self):
+        return self.user_edit.text().strip().lower() in self._DEVELOPER_USERS
+
+    def _update_simulation_visibility(self, user_text=None):
+        visible = self._is_developer_user()
         self.sim_checkbox.setVisible(visible)
         self.sim_profile_combo.setVisible(visible)
         if not visible:
             self.sim_checkbox.setChecked(False)
+
+    def _populate_mode_combo(self):
+        """
+        (Re)build the mode dropdown, excluding not-yet-implemented modes
+        unless the current user is a developer. Preserves the current
+        selection where possible; falls back to the first available mode
+        if the selected one just got filtered out.
+        """
+
+        previous_mode = self.mode_combo.currentData() if self.mode_combo.count() else None
+        include_unimplemented = self._is_developer_user()
+
+        self.mode_combo.blockSignals(True)
+        self.mode_combo.clear()
+        for mode_key, label in MODE_LABELS.items():
+            if mode_key in self._UNIMPLEMENTED_MODES and not include_unimplemented:
+                continue
+            self.mode_combo.addItem(label, mode_key)
+
+        restored_index = self.mode_combo.findData(previous_mode)
+        self.mode_combo.setCurrentIndex(restored_index if restored_index >= 0 else 0)
+        self.mode_combo.blockSignals(False)
+
+    def _update_mode_combo_for_user(self, user_text=None):
+        self._populate_mode_combo()
+        # Rebuilding doesn't emit currentIndexChanged (signals were
+        # blocked); tell listeners explicitly in case the selection
+        # changed (e.g. a Lock-in mode got filtered out).
+        self._emit_mode()
 
     def _emit_mode(self):
         """

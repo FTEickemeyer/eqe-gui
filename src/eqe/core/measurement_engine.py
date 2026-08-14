@@ -507,6 +507,12 @@ def perform_live_monitoring(
         except Exception as e:
             emit_status(f"WARNING: Failed to disable test-cell output: {e}")
 
+        try:
+            emit_status("Returning monochromator to 550 nm...")
+            mono.goto_nm(550, on_status=emit_status)
+        except Exception as e:
+            emit_status(f"WARNING: Failed to return monochromator to 550 nm: {e}")
+
     emit_status("Live monitoring stopped")
 
     df = pd.DataFrame({
