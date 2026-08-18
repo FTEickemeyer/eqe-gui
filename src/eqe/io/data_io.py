@@ -209,15 +209,18 @@ def save_data(
         # be negative. "Current cell (A)" here is the *external* Si71889
         # reading, whose sign is just whichever way its leads happen to be
         # wired for a given calibration run (see the two-reference-cells
-        # note in CLAUDE.md) -- abs() so that wiring polarity never leaks
-        # into the derived quantity. Without this, a Si71889 wired to read
-        # negative (as it currently is) makes "incident beam current",
-        # and therefore the ratio below, negative; since the *internal*
-        # reference cell (Current ref (A) / intSiref, always positive) is
-        # what this ratio gets multiplied back against during a normal
-        # EQE scan, a negative ratio silently clamps every computed IPCE
-        # to 0% (measurement_engine.py's 0-200% sanity clamp) instead of
-        # raising an error -- this bit us in practice, see git history.
+        # note in CLAUDE.md) and has flipped at least once already as the
+        # physical wiring was changed -- abs() so that wiring polarity can
+        # never leak into the derived quantity, regardless of which way
+        # the Si71889 happens to be wired at calibration time. Without
+        # this, a negative "Current cell (A)" makes "incident beam
+        # current", and therefore the ratio below, negative; since the
+        # *internal* reference cell (Current ref (A) / intSiref, always
+        # positive) is what this ratio gets multiplied back against
+        # during a normal EQE scan, a negative ratio silently clamps
+        # every computed IPCE to 0% (measurement_engine.py's 0-200%
+        # sanity clamp) instead of raising an error -- this bit us in
+        # practice, see git history.
         df["incident beam current (A)"] = (
             df["Current cell (A)"].abs() / df["IPCE Si71889 (%)"]
         )

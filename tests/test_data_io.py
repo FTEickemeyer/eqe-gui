@@ -93,15 +93,15 @@ class IncidentBeamCurrentSignTests(unittest.TestCase):
     computed IPCE to 0% instead of raising an error (see git history).
     """
 
-    def test_negative_si71889_current_still_yields_positive_ratio(self):
+    def _save_and_read_incbeamcurr(self, cell_current):
+        """Runs a calibration save with a fixed 'Current cell (A)' value
+        (sign varied per test) and returns the saved incbeamcurr file."""
         wavelengths = [400, 410, 420]
         df = pd.DataFrame(
             {
                 "Wavelength (nm)": wavelengths,
                 "Current ref (A)": [1e-6] * len(wavelengths),
-                # Si71889 wired to read negative -- must not flip the sign
-                # of the derived "incident beam current" ratio.
-                "Current cell (A)": [-2e-6] * len(wavelengths),
+                "Current cell (A)": [cell_current] * len(wavelengths),
             }
         ).set_index("Wavelength (nm)")
         df_ref = pd.Series(
@@ -128,13 +128,28 @@ class IncidentBeamCurrentSignTests(unittest.TestCase):
 
             incbeamcurr_files = list(tmp.glob("incbeamcurr_*.csv"))
             self.assertEqual(len(incbeamcurr_files), 1)
-            saved = pd.read_csv(incbeamcurr_files[0], index_col=0)
+            return pd.read_csv(incbeamcurr_files[0], index_col=0)
+
+    def test_negative_si71889_current_still_yields_positive_ratio(self):
+        # Si71889 wired to read negative -- must not flip the sign of the
+        # derived "incident beam current" ratio.
+        saved = self._save_and_read_incbeamcurr(cell_current=-2e-6)
 
         ratio = saved["incident beam current (A)/intSiref current (A)"]
         self.assertTrue((ratio > 0).all(), ratio.tolist())
         # Raw "Current cell (A)" is kept as measured -- an honest record,
         # not silently flipped.
         self.assertTrue((saved["Current cell (A)"] < 0).all())
+
+    def test_positive_si71889_current_also_yields_positive_ratio(self):
+        # Same physical setup, opposite wiring polarity -- the derived
+        # ratio must come out identical either way (sign-independent),
+        # since the Si71889's wiring has flipped before and will again.
+        saved = self._save_and_read_incbeamcurr(cell_current=2e-6)
+
+        ratio = saved["incident beam current (A)/intSiref current (A)"]
+        self.assertTrue((ratio > 0).all(), ratio.tolist())
+        self.assertTrue((saved["Current cell (A)"] > 0).all())
 
 
 if __name__ == "__main__":
