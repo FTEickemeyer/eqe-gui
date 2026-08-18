@@ -11,6 +11,40 @@ from fte_analysis_libraries import Spectrum as spc
 # controller.py). Kept here as a fallback for standalone/direct calls.
 GRATING_CHANGE_NM = 850
 
+def _negative_ipce_warning(nm, ipce, bias_enabled, bias_voltage):
+    """
+    Status message for a negative computed IPCE (see the 0-200% sanity
+    clamp in perform_measurement()/perform_live_monitoring()).
+
+    Unbiased, this almost always means a sign mismatch between the
+    test-cell reading and what the calibration expects -- e.g. a wiring
+    polarity issue. Under a large enough positive bias, though, a sign
+    flip can be genuine: dark/injection current can come to dominate the
+    photocurrent (e.g. near/above the cell's photovoltage) and legitimately
+    reverse the net current's sign -- not a wiring mistake. Word the
+    message accordingly so a real biased-EQE run doesn't read as a false
+    alarm every time.
+    """
+    base = (
+        f"WARNING: Computed EQE at {nm:.0f} nm is negative ({ipce:.3g} %) "
+        "-- clamped to 0%."
+    )
+    if bias_enabled:
+        return (
+            f"{base} This can be genuine at {bias_voltage:.3f} V bias -- "
+            "dark/injection current can dominate and reverse the net "
+            "current's sign (e.g. near/above the cell's photovoltage) -- "
+            "or it can mean the sample's wiring polarity into the "
+            "test-cell meter is reversed. Check the raw 'Current cell (A)' "
+            "column if unsure which."
+        )
+    return (
+        f"{base} This usually means the test-cell current has the "
+        "opposite sign from what the calibration expects; check the "
+        "sample's wiring polarity into the test-cell meter."
+    )
+
+
 def interruptible_sleep(duration_s, stop_requested, chunk_s=0.05):
     end_time = time.time() + duration_s
     while time.time() < end_time:
@@ -187,11 +221,7 @@ def perform_measurement(
                         IPCE = cell_current / denominator
                     if IPCE is not None and IPCE < 0.0 and not warned_negative_ipce:
                         emit_status(
-                            f"WARNING: Computed EQE at {nm} nm is negative "
-                            f"({IPCE:.3g} %) -- clamped to 0%. This usually means "
-                            "the test-cell current has the opposite sign from what "
-                            "the calibration expects; check the sample's wiring "
-                            "polarity into the test-cell meter."
+                            _negative_ipce_warning(nm, IPCE, bias_enabled, bias_voltage)
                         )
                         warned_negative_ipce = True
                     if not (0.0 <= IPCE <= 200.0):
@@ -497,11 +527,7 @@ def perform_live_monitoring(
                 IPCE = cell_current / denominator
             if IPCE < 0.0 and not warned_negative_ipce:
                 emit_status(
-                    f"WARNING: Computed EQE at {nm:.0f} nm is negative "
-                    f"({IPCE:.3g} %) -- clamped to 0%. This usually means "
-                    "the test-cell current has the opposite sign from what "
-                    "the calibration expects; check the sample's wiring "
-                    "polarity into the test-cell meter."
+                    _negative_ipce_warning(nm, IPCE, bias_enabled, bias_voltage)
                 )
                 warned_negative_ipce = True
             if not (0.0 <= IPCE <= 200.0):

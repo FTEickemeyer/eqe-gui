@@ -282,6 +282,67 @@ class PerformMeasurementRoleAgnosticTests(unittest.TestCase):
         self.assertFalse(test_meter.output_enabled)
 
 
+class NegativeIPCEWarningTests(unittest.TestCase):
+    """
+    A negative computed IPCE (test-cell current with the opposite sign
+    from what the calibration ratio expects) gets clamped to 0% -- see
+    the 0-200% sanity clamp -- but must not do so silently, or this class
+    of problem is indistinguishable from a flat, uninteresting 0%
+    measurement (see git history: this bit us in practice, twice).
+
+    Unbiased, a sign mismatch is essentially always a wiring problem.
+    Under bias, though, a sign flip can be genuine (dark/injection
+    current dominating near/above the cell's photovoltage), so the
+    warning's wording must not accuse wiring outright in that case.
+    """
+
+    def _calibration_df(self, wavelengths):
+        return pd.DataFrame(
+            {"incident beam current (A)/intSiref current (A)": [1.0] * len(wavelengths)},
+            index=wavelengths,
+        )
+
+    def _run(self, bias_enabled, bias_voltage):
+        mono = FakeMonochromator()
+        reference_meter = FakeCurrentMeter(value=1e-6)
+        test_meter = FakeBiasCurrentMeter(value=-1e-6)  # wrong-sign current
+        hardware = MeasurementHardware(
+            reference_meter=reference_meter, test_meter=test_meter, monochromator=mono
+        )
+        df_incbeamcurr = self._calibration_df([400])
+
+        statuses = []
+        df = perform_measurement(
+            hardware,
+            df_incbeamcurr,
+            calibration_measurement=False,
+            nm_lim=(400, 400),
+            delta_nm=10,
+            bias_enabled=bias_enabled,
+            bias_voltage=bias_voltage,
+            on_status=statuses.append,
+        )
+        return df, statuses
+
+    def test_negative_ipce_is_clamped_to_zero(self):
+        df, _ = self._run(bias_enabled=False, bias_voltage=0.0)
+        self.assertEqual(df["EQE (%)"].iloc[0], 0.0)
+
+    def test_unbiased_warning_points_at_wiring(self):
+        _, statuses = self._run(bias_enabled=False, bias_voltage=0.0)
+        warnings = [s for s in statuses if "negative" in s.lower()]
+        self.assertEqual(len(warnings), 1)  # fires once, not every point
+        self.assertIn("wiring", warnings[0].lower())
+        self.assertNotIn("bias", warnings[0].lower())
+
+    def test_biased_warning_does_not_accuse_wiring_outright(self):
+        _, statuses = self._run(bias_enabled=True, bias_voltage=0.7)
+        warnings = [s for s in statuses if "negative" in s.lower()]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("bias", warnings[0].lower())
+        self.assertIn("genuine", warnings[0].lower())
+
+
 # ---------------------------------------------------------------------
 # Stabilization time: the "Advanced Acquisition Settings" wait applied
 # after every wavelength move, before that point's reading (see
