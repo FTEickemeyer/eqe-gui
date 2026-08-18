@@ -80,5 +80,62 @@ class SaveDataFilenamePrefixTests(unittest.TestCase):
         self.assertTrue(fp.name.startswith("EQE_"), fp.name)
 
 
+class IncidentBeamCurrentSignTests(unittest.TestCase):
+    """
+    "incident beam current (A)" stands in for the light intensity itself
+    and must always come out positive, regardless of which way the
+    *external* Si71889 reference cell's leads happen to be wired for a
+    given calibration run (see the two-reference-cells note in
+    CLAUDE.md) -- a negative "Current cell (A)" must not silently negate
+    the derived ratio, since that ratio later gets multiplied against
+    the *internal* reference cell's current (always positive) during a
+    normal EQE scan; a negative ratio there previously clamped every
+    computed IPCE to 0% instead of raising an error (see git history).
+    """
+
+    def test_negative_si71889_current_still_yields_positive_ratio(self):
+        wavelengths = [400, 410, 420]
+        df = pd.DataFrame(
+            {
+                "Wavelength (nm)": wavelengths,
+                "Current ref (A)": [1e-6] * len(wavelengths),
+                # Si71889 wired to read negative -- must not flip the sign
+                # of the derived "incident beam current" ratio.
+                "Current cell (A)": [-2e-6] * len(wavelengths),
+            }
+        ).set_index("Wavelength (nm)")
+        df_ref = pd.Series(
+            [50.0] * len(wavelengths),
+            index=pd.Index(wavelengths, name="Wavelength (nm)"),
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            with mock.patch.object(
+                data_io, "get_paths", return_value={"calibrations_dir": tmp}
+            ), mock.patch.object(
+                data_io,
+                "load_config",
+                return_value={"calibration": {"grating_change_nm": 850}},
+            ):
+                save_data(
+                    df=df,
+                    df_ref=df_ref,
+                    sample_name="Si71889",
+                    user_dir=tmp,
+                    calibration_measurement=True,
+                )
+
+            incbeamcurr_files = list(tmp.glob("incbeamcurr_*.csv"))
+            self.assertEqual(len(incbeamcurr_files), 1)
+            saved = pd.read_csv(incbeamcurr_files[0], index_col=0)
+
+        ratio = saved["incident beam current (A)/intSiref current (A)"]
+        self.assertTrue((ratio > 0).all(), ratio.tolist())
+        # Raw "Current cell (A)" is kept as measured -- an honest record,
+        # not silently flipped.
+        self.assertTrue((saved["Current cell (A)"] < 0).all())
+
+
 if __name__ == "__main__":
     unittest.main()

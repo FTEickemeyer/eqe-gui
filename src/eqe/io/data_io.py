@@ -204,7 +204,23 @@ def save_data(
     if calibration_measurement:
         df_ref_interpol = df_interpolate(df_ref, df.index)
         df["IPCE Si71889 (%)"] = df_ref_interpol.values
-        df["incident beam current (A)"] = df["Current cell (A)"] / df["IPCE Si71889 (%)"]
+        # "incident beam current" stands in for the light intensity itself
+        # (by way of the Si71889's certified IPCE) -- physically it can't
+        # be negative. "Current cell (A)" here is the *external* Si71889
+        # reading, whose sign is just whichever way its leads happen to be
+        # wired for a given calibration run (see the two-reference-cells
+        # note in CLAUDE.md) -- abs() so that wiring polarity never leaks
+        # into the derived quantity. Without this, a Si71889 wired to read
+        # negative (as it currently is) makes "incident beam current",
+        # and therefore the ratio below, negative; since the *internal*
+        # reference cell (Current ref (A) / intSiref, always positive) is
+        # what this ratio gets multiplied back against during a normal
+        # EQE scan, a negative ratio silently clamps every computed IPCE
+        # to 0% (measurement_engine.py's 0-200% sanity clamp) instead of
+        # raising an error -- this bit us in practice, see git history.
+        df["incident beam current (A)"] = (
+            df["Current cell (A)"].abs() / df["IPCE Si71889 (%)"]
+        )
         df["incident beam current (A)/intSiref current (A)"] = (
             df["incident beam current (A)"] / df["Current ref (A)"]
         )
