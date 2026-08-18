@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eqe-gui"
-version = "0.2.6"
+version = "0.2.7"
 description = "EQE/IPCE measurement GUI for photovoltaic devices"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,6 +17,18 @@ dependencies = [
     "PyVISA>=1.16,<2",
     "PyYAML>=6.0,<7",
     "fte-analysis-libraries @ git+https://github.com/FTEickemeyer/FTE-analysis-libraries.git@6d17ae96e6a3a8b9a112aff2779e378518ef1bcb",
+    # Not imported directly by eqe-gui -- pandas needs it to read the
+    # legacy .xls AM1.5 reference-spectrum file bundled inside
+    # fte-analysis-libraries (Spectrum.load_astmg173(), used for the
+    # "Integrated current" column). fte-analysis-libraries doesn't
+    # declare this dependency itself, so a fresh install silently has
+    # working EQE but "Integrated current" always 0.0 -- the AM1.5
+    # spectrum load fails and measurement_engine.py's integration step
+    # (now: warns once and) falls back to 0.0. Only present here
+    # incidentally on a dev machine that happens to have it installed
+    # for something else, which is exactly why this bit a colleague's
+    # fresh pip install and not this account -- pin it explicitly.
+    "xlrd>=2.0.1,<3",
 ]
 
 # Lets colleagues run the GUI as a plain command after installing

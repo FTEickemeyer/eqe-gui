@@ -170,6 +170,7 @@ def perform_measurement(
 
         trapz_fn = getattr(np, "trapz", np.trapezoid)
         warned_negative_ipce = False
+        warned_integration_failed = False
 
         for nm in wavelengths:
             if should_stop():
@@ -248,7 +249,18 @@ def perform_measurement(
                                 dx=delta_nm,
                             )
                         except Exception as e:
-                            print(f"Integration failed: {e}")
+                            if not warned_integration_failed:
+                                emit_status(
+                                    f"WARNING: Integrated-current calculation failed "
+                                    f"({e}) -- 'Integrated current' will read 0.0 for "
+                                    "the rest of this scan. EQE (%) itself is "
+                                    "unaffected. This usually means the AM1.5 "
+                                    "reference spectrum couldn't be loaded (e.g. a "
+                                    "missing 'xlrd' dependency for fte-analysis-"
+                                    "libraries) -- check the install, not the "
+                                    "measurement."
+                                )
+                                warned_integration_failed = True
                             int_curr = 0.0
                     else:
                         int_curr = 0.0
