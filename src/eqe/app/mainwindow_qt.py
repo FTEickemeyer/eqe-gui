@@ -339,6 +339,33 @@ class MainWindow(QMainWindow):
             )
 
             # --------------------------------------------------
+            # Recapture reference-meter dark current now that its mode is
+            # definitely correct.
+            #
+            # On a fresh real connection, initialize_system() captures
+            # dark current *before* the reconfigure above -- using
+            # whatever mode the driver's constructor defaults to
+            # ("current"). This lab's actual wiring only supports
+            # "voltage_shunt" (see README's Advanced Acquisition Settings
+            # section); reading direct current on it hits a disconnected
+            # input and returns the instrument's overflow sentinel
+            # (~9.9e+37) instead of a real value. That garbage then gets
+            # stored as dark_current and subtracted from every reading
+            # for the rest of the session -- e.g. showing up as
+            # Current ref (A) = -9.9e+37 in saved data. Recapturing here,
+            # after the mode this run will actually use is applied, fixes
+            # it regardless of whether the connection is fresh or reused.
+            # Real hardware only: simulated hardware has no such
+            # mode-dependent dark offset, and recapturing there would
+            # just fold a bit of live simulated signal into dark_current.
+            # --------------------------------------------------
+            if not self.session_panel.sim_checkbox.isChecked():
+                self.controller.mono.shutter(True)
+                self.controller.hardware.reference_meter.dark_current = (
+                    self.controller.hardware.reference_meter.measure_current()
+                )
+
+            # --------------------------------------------------
             # Load calibration
             # --------------------------------------------------
             df_incbeamcurr, df_ref, fp_incbeamcurr = open_calibration(
