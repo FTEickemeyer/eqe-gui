@@ -57,6 +57,13 @@ from anywhere the venv is active. (`python -m eqe` still works too.) To upgrade 
 the latest version later, run the same `pip install git+...` command again, or add
 `--upgrade`.
 
+`eqe` is a windowed command — running it never opens a console/terminal window
+alongside the GUI, so it's safe to launch from a desktop shortcut or the Start menu
+(right-click `.venv\Scripts\eqe.exe` → Send to → Desktop). If the GUI ever seems to
+fail to start with no visible error, check `%USERPROFILE%\.eqe\eqe_gui.log` — with no
+console to print diagnostics to, that's where they go instead. (`python -m eqe` keeps
+printing to whatever terminal you launched it from, as before.)
+
 > **Gotcha:** a venv is not relocatable by copying files. `.venv/Scripts/activate.bat`
 > and `.venv/pyvenv.cfg` bake in the *absolute path* the venv was created at. If you
 > ever copy a venv folder to a different path or a different Windows user account,
@@ -120,7 +127,9 @@ don't set falls back to the default.
 eqe
 ```
 
-(or `python -m eqe` — both work; see [Installation](#installation).)
+(or `python -m eqe` — both work; see [Installation](#installation).) `eqe` opens
+straight to the GUI window, with no console window — see the note at the end of
+[Installation](#installation) if you need to check its log for a startup problem.
 
 To run without hardware, enable simulation mode from the **Session** panel in the
 GUI — this swaps in `SimulatedSMU`/`SimulatedMonochromator` and lets you exercise

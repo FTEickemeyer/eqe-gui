@@ -21,7 +21,14 @@ dependencies = [
 
 # Lets colleagues run the GUI as a plain command after installing
 # (`eqe`), instead of needing `python -m eqe`. Both keep working.
-[project.scripts]
+#
+# gui-scripts (not scripts/console_scripts) so pip generates a
+# windowed eqe.exe launcher (pythonw.exe-based) on Windows -- running
+# `eqe` never pops up a console window alongside the GUI. `python -m
+# eqe` is unaffected either way and still runs in whatever console you
+# launched it from. See gui_qt.py's _redirect_stdio_for_windowed_launch
+# for why this needs a stdout/stderr fallback.
+[project.gui-scripts]
 eqe = "eqe.app.gui_qt:main"
 
 [tool.setuptools]

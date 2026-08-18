@@ -101,8 +101,11 @@ Key fields: `instruments.active_profile` + `instruments.profiles.*`, `calibratio
 
 ### Packaging
 
-This is a real pip package (`pyproject.toml`): dependencies, the `eqe` console-script
-entry point (`eqe.app.gui_qt:main`), and non-`.py` runtime resources
+This is a real pip package (`pyproject.toml`): dependencies, the `eqe` gui-script
+entry point (`eqe.app.gui_qt:main` — `gui-scripts`, not `console_scripts`, so the
+installed `eqe.exe` is a windowed launcher and never pops up a console window on
+Windows; see `gui_qt.py`'s `_redirect_stdio_for_windowed_launch` for the
+stdout/stderr fallback that requires), and non-`.py` runtime resources
 (`config/config_default.yaml`, `config/config_local_example.yaml`,
 `resources/calibration_defaults/*.csv`, `app/assets/*.ico`) are all declared there. Every
 package directory needs an `__init__.py` (even data-only ones like

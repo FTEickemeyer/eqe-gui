@@ -12,6 +12,33 @@ startup logic with GUI implementation details.
 """
 
 import sys
+from pathlib import Path
+
+
+def _redirect_stdio_for_windowed_launch():
+    """
+    The `eqe` command is installed as a Windows GUI entry point (see
+    pyproject.toml's [project.gui-scripts]) so launching it never pops up
+    a console window. Under that launcher (pythonw.exe), sys.stdout and
+    sys.stderr are None -- not just silent, genuinely absent -- so any
+    print() call, or an unhandled exception's traceback, would raise
+    AttributeError instead of merely being lost. Redirect both to a log
+    file in that case so diagnostics (and crash tracebacks) land
+    somewhere findable rather than crashing the app a second time.
+    Left alone when run from a real console (`eqe` in a terminal,
+    `python -m eqe`), where stdout/stderr already work normally.
+    """
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+
+    log_dir = Path.home() / ".eqe"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = open(log_dir / "eqe_gui.log", "a", encoding="utf-8", buffering=1)
+    sys.stdout = log_file
+    sys.stderr = log_file
+
+
+_redirect_stdio_for_windowed_launch()
 
 # QApplication manages the entire Qt application lifecycle
 from PySide6.QtWidgets import QApplication
