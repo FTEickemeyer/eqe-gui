@@ -82,15 +82,15 @@ class SaveDataFilenamePrefixTests(unittest.TestCase):
 
 class IncidentBeamCurrentSignTests(unittest.TestCase):
     """
-    "incident beam current (A)" stands in for the light intensity itself
-    and must always come out positive, regardless of which way the
-    *external* Si71889 reference cell's leads happen to be wired for a
-    given calibration run (see the two-reference-cells note in
-    CLAUDE.md) -- a negative "Current cell (A)" must not silently negate
-    the derived ratio, since that ratio later gets multiplied against
-    the *internal* reference cell's current (always positive) during a
-    normal EQE scan; a negative ratio there previously clamped every
-    computed IPCE to 0% instead of raising an error (see git history).
+    "incident beam current (A)" is derived straight from "Current cell
+    (A)" -- deliberately *not* abs()'d (see the comment in save_data()).
+    Correctness relies on wiring discipline (the external Si71889, the
+    internal reference cell, and any DUT all wired to the same polarity
+    convention), not a software sign correction: an earlier abs()-based
+    "fix" was tried and reverted, since it silently masked genuine wiring
+    mistakes and broke the same-cell-after-its-own-calibration
+    self-consistency check (see git history). These tests just pin down
+    that the derivation is a plain division with no sign games.
     """
 
     def _save_and_read_incbeamcurr(self, cell_current):
@@ -130,21 +130,22 @@ class IncidentBeamCurrentSignTests(unittest.TestCase):
             self.assertEqual(len(incbeamcurr_files), 1)
             return pd.read_csv(incbeamcurr_files[0], index_col=0)
 
-    def test_negative_si71889_current_still_yields_positive_ratio(self):
-        # Si71889 wired to read negative -- must not flip the sign of the
-        # derived "incident beam current" ratio.
+    def test_negative_si71889_current_yields_negative_ratio(self):
+        # Si71889 wired to read negative (a wiring mistake, or a
+        # not-yet-fixed polarity) -- the derived ratio must reflect that
+        # honestly rather than have its sign corrected away, so a
+        # subsequent unbiased scan of a correctly-wired (positive) DUT
+        # visibly clamps to 0% instead of silently looking fine.
         saved = self._save_and_read_incbeamcurr(cell_current=-2e-6)
 
         ratio = saved["incident beam current (A)/intSiref current (A)"]
-        self.assertTrue((ratio > 0).all(), ratio.tolist())
-        # Raw "Current cell (A)" is kept as measured -- an honest record,
-        # not silently flipped.
+        self.assertTrue((ratio < 0).all(), ratio.tolist())
         self.assertTrue((saved["Current cell (A)"] < 0).all())
 
-    def test_positive_si71889_current_also_yields_positive_ratio(self):
-        # Same physical setup, opposite wiring polarity -- the derived
-        # ratio must come out identical either way (sign-independent),
-        # since the Si71889's wiring has flipped before and will again.
+    def test_positive_si71889_current_yields_positive_ratio(self):
+        # Correct wiring discipline: Si71889, the internal reference
+        # cell, and a normal DUT all read positive -- the derived ratio
+        # follows suit, so a normal unbiased scan comes out positive too.
         saved = self._save_and_read_incbeamcurr(cell_current=2e-6)
 
         ratio = saved["incident beam current (A)/intSiref current (A)"]

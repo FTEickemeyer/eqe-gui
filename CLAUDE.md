@@ -140,6 +140,19 @@ These rules are non-negotiable. Apply them to every change, in every file.
   mistake with real consequences (a wrong calibration silently corrupts every EQE scan
   that uses it) — when touching calibration code or text, grep for the other spelling
   and double check which cell a given line actually means.
+- **Never sign-correct currents in software (no `abs()` on `Current cell (A)` /
+  `Current ref (A)` anywhere).** Correctness depends on wiring discipline instead: the
+  external Si71889, the internal reference cell, and any DUT's test-cell reading must
+  all be wired to the same polarity convention (positive), by physical convention, not
+  code. If that slips, an unbiased EQE scan computes negative and
+  `measurement_engine.py`'s 0-200% sanity clamp floors it to 0% *with a logged
+  warning* — that's the intended signal to go check wiring, not a bug to route around
+  in software. An `abs()`-based auto-correction was tried here and reverted: it masked
+  genuine wiring mistakes and broke the same-cell-after-its-own-calibration
+  self-consistency check (measuring the Si71889 again right after calibrating with it
+  should reproduce ~its own IPCE curve, not silently "work" regardless of sign). See
+  `save_data()` in `io/data_io.py` and `_negative_ipce_warning()` in
+  `core/measurement_engine.py`.
 
 ---
 

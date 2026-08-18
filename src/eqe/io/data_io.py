@@ -205,24 +205,27 @@ def save_data(
         df_ref_interpol = df_interpolate(df_ref, df.index)
         df["IPCE Si71889 (%)"] = df_ref_interpol.values
         # "incident beam current" stands in for the light intensity itself
-        # (by way of the Si71889's certified IPCE) -- physically it can't
-        # be negative. "Current cell (A)" here is the *external* Si71889
-        # reading, whose sign is just whichever way its leads happen to be
-        # wired for a given calibration run (see the two-reference-cells
-        # note in CLAUDE.md) and has flipped at least once already as the
-        # physical wiring was changed -- abs() so that wiring polarity can
-        # never leak into the derived quantity, regardless of which way
-        # the Si71889 happens to be wired at calibration time. Without
-        # this, a negative "Current cell (A)" makes "incident beam
-        # current", and therefore the ratio below, negative; since the
-        # *internal* reference cell (Current ref (A) / intSiref, always
-        # positive) is what this ratio gets multiplied back against
-        # during a normal EQE scan, a negative ratio silently clamps
-        # every computed IPCE to 0% (measurement_engine.py's 0-200%
-        # sanity clamp) instead of raising an error -- this bit us in
-        # practice, see git history.
+        # (by way of the Si71889's certified IPCE). Deliberately *not*
+        # abs()'d: correctness here relies on wiring discipline, not a
+        # software correction -- the *external* Si71889 reference cell,
+        # the *internal* reference cell (Current ref (A) / intSiref), and
+        # any DUT's test-cell reading must all be wired to the same
+        # polarity convention (positive), so this ratio and a normal
+        # scan's cell_current end up with matching signs and the division
+        # in measurement_engine.py comes out positive.
+        #
+        # If that discipline slips -- e.g. the Si71889 reads negative here
+        # -- a later unbiased EQE scan of a correctly-wired DUT will
+        # compute a negative IPCE, which measurement_engine.py's 0-200%
+        # sanity clamp floors to 0% *with a logged warning* rather than
+        # silently correcting it. That's intentional (see git history: an
+        # earlier abs()-based auto-correction here was tried and reverted
+        # -- it masked genuine wiring mistakes and broke the
+        # same-cell-after-its-own-calibration self-consistency check).
+        # Treat a clamped-to-0% unbiased scan as "go check wiring
+        # polarity," not as a dead cell.
         df["incident beam current (A)"] = (
-            df["Current cell (A)"].abs() / df["IPCE Si71889 (%)"]
+            df["Current cell (A)"] / df["IPCE Si71889 (%)"]
         )
         df["incident beam current (A)/intSiref current (A)"] = (
             df["incident beam current (A)"] / df["Current ref (A)"]
