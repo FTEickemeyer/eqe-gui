@@ -135,6 +135,7 @@ def perform_measurement(
         int_curr_arr = []
 
         trapz_fn = getattr(np, "trapz", np.trapezoid)
+        warned_negative_ipce = False
 
         for nm in wavelengths:
             if should_stop():
@@ -184,6 +185,15 @@ def perform_measurement(
                         IPCE = 0.0
                     else:
                         IPCE = cell_current / denominator
+                    if IPCE is not None and IPCE < 0.0 and not warned_negative_ipce:
+                        emit_status(
+                            f"WARNING: Computed EQE at {nm} nm is negative "
+                            f"({IPCE:.3g} %) -- clamped to 0%. This usually means "
+                            "the test-cell current has the opposite sign from what "
+                            "the calibration expects; check the sample's wiring "
+                            "polarity into the test-cell meter."
+                        )
+                        warned_negative_ipce = True
                     if not (0.0 <= IPCE <= 200.0):
                         IPCE = max(0.0, min(IPCE, 200.0)) if np.isfinite(IPCE) else 0.0
                     IPCE_arr.append(IPCE)
@@ -453,6 +463,7 @@ def perform_live_monitoring(
         eqe_arr = []
         ref_current_arr = []
         cell_current_arr = []
+        warned_negative_ipce = False
 
         while not should_stop():
 
@@ -484,6 +495,15 @@ def perform_live_monitoring(
                 IPCE = 0.0
             else:
                 IPCE = cell_current / denominator
+            if IPCE < 0.0 and not warned_negative_ipce:
+                emit_status(
+                    f"WARNING: Computed EQE at {nm:.0f} nm is negative "
+                    f"({IPCE:.3g} %) -- clamped to 0%. This usually means "
+                    "the test-cell current has the opposite sign from what "
+                    "the calibration expects; check the sample's wiring "
+                    "polarity into the test-cell meter."
+                )
+                warned_negative_ipce = True
             if not (0.0 <= IPCE <= 200.0):
                 IPCE = max(0.0, min(IPCE, 200.0)) if np.isfinite(IPCE) else 0.0
 
