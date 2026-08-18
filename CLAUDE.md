@@ -230,6 +230,19 @@ since those introduce new hardware dependencies.
   branch again for another sizeable, multi-session effort.
 - Write clear, descriptive commit messages explaining what changed and why.
 - Commit working states only — do not commit broken or half-refactored code.
+- **Bump `version` in `pyproject.toml` on every push that changes installed
+  behavior** (i.e. anything under `src/`, `pyproject.toml` itself, or shipped
+  package data — not doc-only or test-only changes). A patch bump
+  (`0.2.0` → `0.2.1`) is enough for routine fixes; bump minor for a
+  user-facing feature or behavior change. Do this in the same commit as the
+  change, not a separate one.
+  **Why:** colleagues install via `pip install git+https://github.com/FTEickemeyer/eqe-gui.git`
+  (see README's Installation section) and upgrade via
+  `pip install --upgrade git+...`. Without a version bump, pip can decide the
+  already-installed version still "satisfies" the requirement and skip
+  reinstalling even though the code on GitHub has moved on — this has
+  already caused a colleague's upgrade to silently do nothing. A version
+  bump is what makes `--upgrade` actually detect and pull the new commit.
 
 ---
 
