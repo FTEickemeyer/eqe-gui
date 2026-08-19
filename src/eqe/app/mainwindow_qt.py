@@ -358,9 +358,21 @@ class MainWindow(QMainWindow):
             # Real hardware only: simulated hardware has no such
             # mode-dependent dark offset, and recapturing there would
             # just fold a bit of live simulated signal into dark_current.
+            #
+            # settle() first: confirmed on real hardware 2026-08-19 that a
+            # dark-current reading taken *immediately* after the
+            # configure_current_measurement() call above -- right after a
+            # prior scan just finished (e.g. Calibration measurement, then
+            # unchecked, then a regular EQE scan) -- can be wildly wrong
+            # (observed ~170 nA off from a true ~2-3 nA dark level, more
+            # than enough to sink an entire EQE scan's weak-signal
+            # wavelengths). It's a one-reading settling transient, not a
+            # persistent fault: the very next reading is back to normal.
+            # See Keithley2000.settle().
             # --------------------------------------------------
             if not self.session_panel.sim_checkbox.isChecked():
                 self.controller.mono.shutter(True)
+                self.controller.hardware.reference_meter.settle()
                 self.controller.hardware.reference_meter.dark_current = (
                     self.controller.hardware.reference_meter.measure_current()
                 )

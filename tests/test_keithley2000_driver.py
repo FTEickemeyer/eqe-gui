@@ -204,5 +204,41 @@ class Keithley2000VoltageShuntModeTests(unittest.TestCase):
         self.assertFalse(any(cmd.startswith(":SENS:CURR:DC:RANG") for cmd in queried))
 
 
+class Keithley2000SettleTests(unittest.TestCase):
+    """
+    settle() (CurrentMeter role hook): confirmed on real hardware
+    2026-08-19 that a dark-current reading taken immediately after
+    configure_current_measurement() -- right after a prior scan just
+    finished -- can be wildly wrong (~170nA off from a true ~2-3nA dark
+    level), settling back to normal from the very next reading onward.
+    mainwindow_qt.py calls settle() right after reconfiguring the
+    reference meter and before trusting its dark-current recapture.
+    """
+
+    def test_settle_takes_one_throwaway_reading(self):
+        meter, _ = _make_meter(mode="voltage_shunt", shunt_resistance_ohms=598)
+        queried = []
+        meter.query = lambda cmd: (queried.append(cmd), "1.0e-6")[1]
+
+        meter.settle()
+
+        self.assertEqual(queried, [":READ?"])
+
+    def test_settle_swallows_communication_errors(self):
+        """
+        Best-effort, like Keithley2400EQE.settle(): a failure here just
+        means the settling read didn't happen -- the real reading right
+        after this call surfaces any actual problem on its own.
+        """
+        meter, _ = _make_meter(mode="voltage_shunt", shunt_resistance_ohms=598)
+
+        def raising_query(cmd):
+            raise TimeoutError("simulated communication loss")
+
+        meter.query = raising_query
+
+        meter.settle()  # must not raise
+
+
 if __name__ == "__main__":
     unittest.main()

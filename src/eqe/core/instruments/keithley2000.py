@@ -408,6 +408,33 @@ class Keithley2000(CurrentMeter):
         """CurrentMeter role API: return one (averaged) current reading."""
         return self.read_current_average(samples=self.samples)
 
+    def settle(self) -> None:
+        """
+        CurrentMeter role hook (see roles.py): take one throwaway reading
+        to let the instrument settle after its function/range was just
+        reconfigured (see configure_current_measurement()/set_mode()) --
+        confirmed on real hardware 2026-08-19: a reference-meter dark
+        current recaptured *immediately* after configure + a just-finished
+        scan can be wildly wrong (observed ~170 nA off from the true ~2-3 nA
+        dark level -- large enough to corrupt an entire subsequent EQE
+        scan's grating-1 range, where the true signal is weakest), but is
+        back to normal from the very next reading onward, taken only ~2s
+        later -- a one-reading settling transient, not a persistent fault.
+        Same pattern as Keithley2400EQE.settle(), just triggered here by a
+        function/range reconfigure rather than an autorange jump.
+
+        Callers that reconfigure this meter and then need a trustworthy
+        reading right away (see mainwindow_qt.py's dark-current recapture)
+        must call this in between. Best-effort: a communication failure
+        here just means the settling read didn't happen -- the real
+        reading right after this call will surface any actual problem on
+        its own.
+        """
+        try:
+            self.read_current()
+        except Exception:
+            pass
+
     # =========================================================
     # Configuration controls
     # =========================================================
