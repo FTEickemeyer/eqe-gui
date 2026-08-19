@@ -62,6 +62,7 @@ from eqe.app.widgets.eqe_plot_widget import EQEPlotWidget
 from eqe.app.qt_models import LIVE_MODES
 from eqe.io.data_io import save_data
 from eqe.io.paths import get_paths, create_user_directory
+from eqe.io.logging import append_line_to_log
 
 
 
@@ -794,6 +795,28 @@ class MainWindow(QMainWindow):
         self.log_panel.append(message)
 
 
+    def _persist_log_message(self, message):
+        """
+        Mirror every Status/Log panel message to disk, so the on-screen
+        history survives closing the GUI (or clicking the panel's own
+        "Clear" button) instead of living only in the QTextEdit widget's
+        memory. Connected to LogPanel's message_logged signal, so this
+        fires for every message the panel ever displays without needing to
+        touch each of its many call sites individually.
+
+        Shares the same daily application log file as append_to_log()'s
+        structured measurement entries (see io/logging.py) -- writing here
+        must never be allowed to crash the GUI over a message that already
+        displayed fine on screen, so failures (e.g. an unwritable
+        logs_dir) are swallowed.
+        """
+
+        try:
+            append_line_to_log(message)
+        except Exception:
+            pass
+
+
     def on_measurement_done(self, df_result):
         """
         Called when the measurement finishes successfully.
@@ -1029,6 +1052,7 @@ class MainWindow(QMainWindow):
 
         # Create the real log panel
         self.log_panel = LogPanel()
+        self.log_panel.message_logged.connect(self._persist_log_message)
 
         self.log_group.layout().addWidget(self.log_panel)
 

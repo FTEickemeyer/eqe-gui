@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QHBoxLayout,
 )
+from PySide6.QtCore import Signal
 from PySide6.QtGui import QTextCursor
 
 
@@ -24,6 +25,12 @@ class LogPanel(QWidget):
     """
     Panel displaying log messages.
     """
+
+    # Emitted every time a message is appended, so a listener (MainWindow)
+    # can persist it to disk without this widget needing to know anything
+    # about backend log files itself -- see append() and
+    # mainwindow_qt.py's _persist_log_message().
+    message_logged = Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -80,3 +87,5 @@ class LogPanel(QWidget):
             cursor.insertText(message)
         else:
             cursor.insertText(message + "\n")
+
+        self.message_logged.emit(message)
