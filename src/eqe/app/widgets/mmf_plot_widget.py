@@ -56,7 +56,7 @@ class MMFPlotWidget(QWidget):
             [], [], color="red", linestyle="-", label="EQE DUT"
         )
         (self.ref_line,) = self.ax.plot(
-            [], [], color="tab:green", linestyle="--", linewidth=0.5,
+            [], [], color="tab:green", linestyle="-", linewidth=0.5,
             label="EQE reference cell",
         )
         # Fine (0.5 pt) solid lines for both spectra on the right axis --
