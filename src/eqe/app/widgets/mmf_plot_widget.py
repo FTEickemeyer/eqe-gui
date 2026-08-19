@@ -56,10 +56,11 @@ class MMFPlotWidget(QWidget):
             [], [], color="red", linestyle="-", label="EQE DUT"
         )
         (self.ref_line,) = self.ax.plot(
-            [], [], color="tab:green", linestyle="--", label="EQE reference cell"
+            [], [], color="tab:green", linestyle="--", linewidth=0.5,
+            label="EQE reference cell",
         )
         # Fine (0.5 pt) solid lines for both spectra on the right axis --
-        # distinguishes them visually from the thicker EQE curves on the
+        # distinguishes them visually from the thicker DUT curve on the
         # left axis and from each other by color only, not by dashing.
         (self.lamp_line,) = self.ax2.plot(
             [], [], color="orange", linestyle="-", linewidth=0.5,
