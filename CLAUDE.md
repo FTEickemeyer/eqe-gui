@@ -184,7 +184,17 @@ test-cell currents are now read simultaneously (added 2026-08-19, see
 both readings the same way and mostly cancels out of the EQE ratio — the Keithley 2400
 test meter's NPLC/samples now match the Keithley 2000 reference meter's (both NPLC=5,
 one reading) so the two integrate over the same duration too; extend both instruments'
-config together if either changes.
+config together if either changes. `Keithley2000` also has its own `settle()` now
+(added 2026-08-19): a reference-meter dark-current reading taken immediately after
+`configure_current_measurement()` — which every real Start click calls — right after a
+prior scan just finished, was confirmed on real hardware to be wildly wrong (~140-170nA
+off from a true ~2-3nA dark level, settling back to normal from the very next reading
+onward). `mainwindow_qt.py`'s dark-current recapture calls `settle()` right after
+reconfiguring, before trusting the "real" reading — same pattern as the 2400's
+autorange settle(), just triggered by a function/range reconfigure instead of a signal
+jump. This was the actual cause of a real, previously mysterious "calibration measures
+fine, but the EQE scan right after doesn't match" bug that looked at first like a bad
+calibration measurement.
 
 Note: the reference meter's "Current (direct)"/"Voltage (shunt)" mode (see
 keithley2000.py's `mode`) is a *software* setting that must match the instrument's
