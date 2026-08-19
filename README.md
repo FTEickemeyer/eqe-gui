@@ -62,7 +62,9 @@ alongside the GUI, so it's safe to launch from a desktop shortcut or the Start m
 (right-click `.venv\Scripts\eqe.exe` → Send to → Desktop). If the GUI ever seems to
 fail to start with no visible error, check `%USERPROFILE%\.eqe\eqe_gui.log` — with no
 console to print diagnostics to, that's where they go instead. (`python -m eqe` keeps
-printing to whatever terminal you launched it from, as before.)
+printing to whatever terminal you launched it from, as before.) See
+[Logging](#logging) for the full breakdown of both log files, including the one that
+mirrors everything shown in the GUI's own Status/Log panel.
 
 > **Gotcha:** a venv is not relocatable by copying files. `.venv/Scripts/activate.bat`
 > and `.venv/pyvenv.cfg` bake in the *absolute path* the venv was created at. If you
@@ -171,6 +173,31 @@ reference cell's signal:
 > go back to direct current sensing, physically rewire the reference cell to the
 > AMPS/INPUT LO terminals *and* switch the dropdown to "Current (direct)" — either
 > alone, without the other, is wrong.
+
+## Logging
+
+Two separate log files, both written under **your own Windows user account** — they
+are not shared between colleagues' accounts or machines, so diagnosing an issue a
+colleague hit means getting the file(s) from *their* account, not yours.
+
+| File | Location | What it contains |
+|---|---|---|
+| Status/Log history | `%USERPROFILE%\AppData\Local\eqe\logs\eqe_YYYY-MM-DD.log` (`paths.logs_dir` in config — see [Configuration](#configuration)) | Every message ever shown in the GUI's Status/Log panel (measurement start/finish, saves, warnings, errors) — mirrored to disk as it's appended to the panel, via `LogPanel`'s `message_logged` signal (see `_persist_log_message()` in `mainwindow_qt.py`). |
+| Crash/startup log | `%USERPROFILE%\.eqe\eqe_gui.log` | Raw `print()` output and unhandled tracebacks only — this is where diagnostics land when the windowed launcher has no console to print to (see `gui_qt.py`'s `_redirect_stdio_for_windowed_launch`). Useful mainly if the GUI fails to start at all, before the Status/Log panel even exists. |
+
+Notes:
+
+- The Status/Log file is **one file per calendar day**, appended across every session
+  launched that day; a new file starts automatically the next day. The crash log is a
+  single ever-growing file (no daily split).
+- Both are plain append-only text files — safe to delete anytime, individually or the
+  whole folder. The program just creates a fresh one the next time it writes; nothing
+  is lost by deleting an old one.
+- There is currently no setting to turn logging off, and no automatic rotation/cleanup
+  — old daily files accumulate until someone deletes them.
+- If you want a *shared* location (e.g. so logs land somewhere a colleague or admin
+  can check without asking each user for their file), point `paths.logs_dir` at a
+  shared/network path in `config_local.yaml` — see [Configuration](#configuration).
 
 ## Calibration
 
