@@ -15,7 +15,6 @@ Main area:
 
 """
 
-from importlib.metadata import version, PackageNotFoundError
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -35,6 +34,7 @@ from eqe.core.controller import MeasurementController
 from eqe.core.models import MeasurementParams
 from eqe.analysis.calibration import open_calibration
 from eqe.utils.validation import nm_lim_ok
+from eqe.utils.app_version import get_app_version
 from eqe.app.widgets.session_panel import SessionPanel
 # Import GUI visibility specification
 from eqe.app.qt_models import (
@@ -459,14 +459,14 @@ class MainWindow(QMainWindow):
         Show the About dialog (version number, mainly to make it easy to
         confirm which build is installed -- see README's Installation
         section for the `pip install --upgrade` command that fetches the
-        latest one). Reads the version pip actually installed rather than
+        latest one). Reads the version via get_app_version() rather than
         a hardcoded string, so it can't drift out of sync with
-        pyproject.toml's `version`.
+        pyproject.toml's `version` -- including for an editable dev
+        install, where the plain installed-metadata version can go stale
+        after a version bump until the next `pip install -e .` (see
+        utils/app_version.py).
         """
-        try:
-            app_version = version("eqe-gui")
-        except PackageNotFoundError:
-            app_version = "unknown (not installed as a package)"
+        app_version = get_app_version()
 
         QMessageBox.about(
             self,
