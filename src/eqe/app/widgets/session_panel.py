@@ -37,6 +37,7 @@ class SessionPanel(QWidget):
     stop_clicked = Signal()
     save_clicked = Signal()
     user_changed = Signal(str)
+    mmf_clicked = Signal()
     about_clicked = Signal()
 
     def __init__(self):
@@ -126,8 +127,16 @@ class SessionPanel(QWidget):
         self.stop_button.clicked.connect(self.stop_clicked.emit)
         self.save_button.clicked.connect(self.save_clicked.emit)
 
-        # Push widgets to the left, "About" to the far right
+        # Push widgets to the left, "MMF"/"About" to the far right
         layout.addStretch()
+
+        # --------------------------------------------------
+        # MMF (Mismatch Factor)
+        # --------------------------------------------------
+
+        self.mmf_button = QPushButton("MMF")
+        layout.addWidget(self.mmf_button)
+        self.mmf_button.clicked.connect(self.mmf_clicked.emit)
 
         # --------------------------------------------------
         # About

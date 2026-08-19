@@ -58,6 +58,7 @@ from eqe.app.widgets.advanced_acquisition_panel import AdvancedAcquisitionPanel
 from eqe.app.widgets.log_panel import LogPanel
 from eqe.app.widgets.bias_panel import BiasPanel
 from eqe.app.widgets.live_numeric_panel import LiveNumericPanel
+from eqe.app.widgets.mmf_dialog import MMFDialog
 from eqe.app.widgets.eqe_plot_widget import EQEPlotWidget
 from eqe.app.qt_models import LIVE_MODES
 from eqe.io.data_io import save_data
@@ -156,6 +157,18 @@ class MainWindow(QMainWindow):
         # measurement itself, which doesn't use one) -- see _on_start()
         # and _save_last_result().
         self._last_incbeamcurr_filename = None
+
+        # Path of the most recently saved EQE-mode scan this session (not
+        # a calibration measurement or a live-mode save, which aren't a
+        # wavelength-swept EQE spectrum) -- used as the MMF dialog's
+        # default DUT file (see _on_mmf()/_save_last_result()). None until
+        # a scan has actually been saved.
+        self._last_saved_eqe_path = None
+
+        # Single MMF dialog instance, created on first use and reused
+        # afterward (see _on_mmf()) rather than opening a new one on every
+        # click.
+        self._mmf_dialog = None
 
         # measurement controller
         self.controller = MeasurementController()
@@ -454,6 +467,24 @@ class MainWindow(QMainWindow):
         """
         self._save_last_result()
 
+    def _on_mmf(self):
+        """
+        Open the Mismatch Factor (MMF) dialog (MMF button). A single
+        instance is created on first use and reused (raised, not
+        recreated) on later clicks, so repeated results/plots stay
+        available rather than resetting every time.
+        """
+        if self._mmf_dialog is None:
+            self._mmf_dialog = MMFDialog(
+                parent=self,
+                default_dut_path=self._last_saved_eqe_path,
+                get_user=self.session_panel.get_user,
+            )
+
+        self._mmf_dialog.show()
+        self._mmf_dialog.raise_()
+        self._mmf_dialog.activateWindow()
+
     def _on_about(self):
         """
         Show the About dialog (version number, mainly to make it easy to
@@ -526,6 +557,13 @@ class MainWindow(QMainWindow):
             )
 
             self.log_panel.append(f"Saved: {fp}")
+
+            # Track for the MMF dialog's default DUT file -- only a real
+            # wavelength-swept EQE scan is a spectrum MMF can use (a
+            # calibration measurement saves raw currents, no EQE; a live
+            # save is a time series at one wavelength, not a spectrum).
+            if not self._active_calibration_measurement and not is_live:
+                self._last_saved_eqe_path = fp
 
         except Exception as exc:
             self.log_panel.append(f"Save failed: {exc}")
@@ -924,6 +962,7 @@ class MainWindow(QMainWindow):
         self.session_panel.start_clicked.connect(self._on_start)
         self.session_panel.stop_clicked.connect(self._on_stop)
         self.session_panel.save_clicked.connect(self._on_save)
+        self.session_panel.mmf_clicked.connect(self._on_mmf)
         self.session_panel.about_clicked.connect(self._on_about)
 
         main_layout.addWidget(self.session_panel)
@@ -1067,6 +1106,15 @@ class MainWindow(QMainWindow):
         splitter.setSizes([400, 1000])
 
     def closeEvent(self, event):
+        # The MMF dialog is non-modal (shown via show(), not exec()) and
+        # not a child of any modal loop, so it wouldn't otherwise close
+        # itself when the main window does -- close it explicitly so a
+        # still-open MMF dialog can't keep the app running (Qt quits the
+        # application once every top-level window is closed) after the
+        # user thinks they've closed the GUI.
+        if self._mmf_dialog is not None:
+            self._mmf_dialog.close()
+
         if self.controller.is_measuring:
             self.controller.stop_measurement()
             worker = self.controller._measurement_thread

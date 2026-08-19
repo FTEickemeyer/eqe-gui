@@ -14,6 +14,9 @@ external Si71889 reference cell — see [Calibration](#calibration)).
 - **Electrical Control** — applies SMU bias voltage with compliance current limiting
 - **Calibration measurement** — produces the incident-beam calibration a regular scan
   needs (see [Calibration](#calibration))
+- **MMF (Mismatch Factor)** — standalone tool computing the spectral mismatch
+  correction factor and AM1.5-equivalent Jsc from a DUT/reference-cell EQE pair and a
+  lamp spectrum (see [MMF (Mismatch Factor)](#mmf-mismatch-factor))
 - **Simulation mode** — runs the full GUI/measurement pipeline against simulated
   instruments, no hardware required (useful for development or demos)
 
@@ -287,6 +290,51 @@ means updating both:
 
 This does **not** involve the internal reference cell in any way -- that one is a
 fixed part of the instrument, not something you swap or reconfigure.
+
+## MMF (Mismatch Factor)
+
+A solar simulator's spectrum never exactly matches AM1.5G, which biases a device's
+short-circuit current measured under it. The **MMF** button (top-right, next to About)
+opens a dialog that computes the standard spectral mismatch correction factor from
+three EQE-vs-wavelength inputs:
+
+- **DUT EQE file** — any of this app's own saved `EQE_*.csv` scan files. Defaults to
+  the most recently *saved* EQE scan this session (blank if none yet) — Browse to pick
+  a different one, including from a previous session.
+- **Reference cell EQE file** — a reference cell's own EQE curve, picked from
+  `paths.mmf_data_dir`'s `EQE_ref_cells/` subfolder. Defaults to the most recently
+  modified file there.
+- **Lamp spectrum file** — the solar simulator's own measured spectral photon flux,
+  picked from `paths.mmf_data_dir`'s `PF_lamp_spectra/` subfolder (`Wavelength (nm),
+  Spectral photon flux (1/[s m2 nm])`). Defaults to whichever file has `OrielIV` in its
+  name (this lab's naming convention for that measurement).
+
+`paths.mmf_data_dir` defaults to `~/Documents/EQE/MMF_data` (both subfolders are
+created automatically if missing) — override it in `config_local.yaml` like any other
+path (see [Configuration](#configuration)) if you want it somewhere else, e.g. a
+shared folder for a curated set of reference-cell/lamp files.
+
+Click **Run** to compute it. The graph shows all four spectra together, resampled onto
+the overlap of the three input files' own wavelength ranges (never extrapolated beyond
+what any of them actually measured) — DUT and reference-cell EQE on the left axis,
+the (peak-)normalized lamp and AM1.5GT spectra on the right axis, so you can visually
+compare the simulator's spectral shape against true sunlight. The Results section
+shows the mismatch factor itself and the DUT's AM1.5-equivalent integrated current
+(Jsc), plus the other three Jsc components (DUT/reference cell, under the simulator
+and under AM1.5) for transparency.
+
+Click **Save** to write three files, all named `MMF_<cell name>_date<date>_time<time>`
+into the same per-user dated folder every other measurement saves into:
+
+- `....csv` — a summary: the three input files used, the integration range, the
+  mismatch factor, and all four Jsc values.
+- `....png` — the graph.
+- `..._data.csv` — the full data behind the graph (the common wavelength grid and all
+  four resampled curves).
+
+The cell name in the filename comes from the DUT file's own `# Sample name:` metadata
+line if present, falling back to parsing it out of the filename, then to the bare
+filename as a last resort.
 
 ## Project layout
 

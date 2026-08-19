@@ -2,6 +2,11 @@ paths:
   measurements_dir: ~/Documents/EQE/measurements
   calibrations_dir: ~/Documents/EQE/calibrations
   logs_dir: ~/AppData/Local/eqe/logs
+  # Reference data for the Mismatch Factor (MMF) tool -- see README's "MMF
+  # (Mismatch Factor)" section. Two fixed subfolders live under this:
+  # EQE_ref_cells/ (reference-cell EQE curves) and PF_lamp_spectra/
+  # (measured solar-simulator spectral photon flux curves).
+  mmf_data_dir: ~/Documents/EQE/MMF_data
 
 # Whether the application log (paths.logs_dir above -- both the Status/Log
 # panel's persisted history and any structured entries) is written to disk

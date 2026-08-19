@@ -1,5 +1,6 @@
 """
-Focused tests for io/data_io.py's save_data() filename convention.
+Focused tests for io/data_io.py's save_data() filename convention and
+save_mmf_result()'s three-file MMF save.
 
 No real hardware or real config/paths involved -- get_paths() is mocked
 so a calibration-measurement save can't write into the real (machine-
@@ -12,6 +13,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -151,6 +153,79 @@ class IncidentBeamCurrentSignTests(unittest.TestCase):
         ratio = saved["incident beam current (A)/intSiref current (A)"]
         self.assertTrue((ratio > 0).all(), ratio.tolist())
         self.assertTrue((saved["Current cell (A)"] > 0).all())
+
+
+class SaveMmfResultTests(unittest.TestCase):
+    """
+    save_mmf_result() (see analysis/mmf.py for MMFResult and how it's
+    computed) writes three files sharing one timestamped base name.
+    """
+
+    def _make_result(self):
+        from eqe.analysis.mmf import MMFResult
+
+        wavelengths = np.array([400.0, 410.0, 420.0])
+        return MMFResult(
+            mmf=0.987,
+            jsc_dut_sim=10.5,
+            jsc_dut_am15=9.5,
+            jsc_ref_sim=10.0,
+            jsc_ref_am15=9.0,
+            left_nm=400.0,
+            right_nm=420.0,
+            delta_nm=10.0,
+            wavelengths_nm=wavelengths,
+            dut_eqe_pct=np.array([20.0, 21.0, 22.0]),
+            ref_eqe_pct=np.array([25.0, 26.0, 27.0]),
+            lamp_pf_normalized=np.array([0.5, 1.0, 0.6]),
+            am15_pf_normalized=np.array([0.4, 0.9, 0.5]),
+            # A comma in the lamp filename (a real-world case, see
+            # PF_lamp_spectra/'s "231128 OrielIV, Gemini180.csv") must
+            # come through the CSV-quoted summary row intact.
+            dut_file=Path("EQE_mycell_date2026-01-01_time12-00-00.csv"),
+            ref_file=Path("EQE_Si1812_date2025-10-23_time12-01-11.csv"),
+            lamp_file=Path("231128 OrielIV, Gemini180.csv"),
+        )
+
+    def test_writes_summary_and_data_csv_without_figure(self):
+        result = self._make_result()
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            paths = data_io.save_mmf_result(result, user_dir=tmp, cell_name="mycell")
+
+            self.assertIn("summary", paths)
+            self.assertIn("data", paths)
+            self.assertNotIn("figure", paths)
+
+            self.assertTrue(paths["summary"].name.startswith("MMF_mycell_date"))
+            self.assertTrue(paths["data"].name.endswith("_data.csv"))
+
+            summary_df = pd.read_csv(paths["summary"])
+            summary = dict(zip(summary_df["Quantity"], summary_df["Value"]))
+            self.assertEqual(summary["Lamp spectrum file"], "231128 OrielIV, Gemini180.csv")
+            self.assertEqual(summary["Reference cell EQE file"], "EQE_Si1812_date2025-10-23_time12-01-11.csv")
+            self.assertAlmostEqual(float(summary["MMF"]), 0.987)
+            self.assertAlmostEqual(float(summary["Jsc DUT @ AM1.5 (mA/cm2)"]), 9.5)
+
+            data_df = pd.read_csv(paths["data"])
+            self.assertEqual(list(data_df["Wavelength (nm)"]), [400.0, 410.0, 420.0])
+            self.assertEqual(list(data_df["EQE DUT (%)"]), [20.0, 21.0, 22.0])
+
+    def test_writes_figure_when_given(self):
+        from matplotlib.figure import Figure
+
+        result = self._make_result()
+        fig = Figure()
+        fig.add_subplot(111).plot([1, 2], [3, 4])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            paths = data_io.save_mmf_result(
+                result, user_dir=tmp, cell_name="mycell", fig=fig
+            )
+            self.assertIn("figure", paths)
+            self.assertTrue(paths["figure"].exists())
+            self.assertTrue(paths["figure"].name.endswith(".png"))
 
 
 if __name__ == "__main__":

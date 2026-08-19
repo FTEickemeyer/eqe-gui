@@ -62,7 +62,7 @@ profile). Switching hardware setups means changing config, not code.
 | GUI | `app/mainwindow_qt.py` | `MainWindow` — collects params, dispatches callbacks, updates plots |
 | GUI | `app/qt_models.py` | Mode constants, per-mode panel visibility rules (`MODE_SECTIONS`) |
 | GUI | `app/state.py` | `AppState` — mutable GUI state |
-| GUI | `app/widgets/*.py` | One widget per panel (scan, wavelength setting, bias, calibration, advanced acquisition, live numeric readout, log, session, metadata) |
+| GUI | `app/widgets/*.py` | One widget per panel (scan, wavelength setting, bias, calibration, advanced acquisition, live numeric readout, log, session, metadata, MMF dialog + its plot) |
 | Controller | `core/controller.py` | `MeasurementController` — threading, stop flag, instrument lifecycle |
 | Engine | `core/measurement_engine.py` | `perform_measurement`, `perform_live_monitoring` |
 | Params | `core/models.py` | `MeasurementParams` dataclass, mode constants (canonical; GUI re-exports from here) |
@@ -75,7 +75,8 @@ profile). Switching hardware setups means changing config, not code.
 | Instruments | `core/instruments/simulated.py` | `SimulatedSMU`, `SimulatedMonochromator` |
 | Config | `config/load_config.py` | `load_config()` — merges default + local YAML; see Configuration below |
 | Analysis | `analysis/calibration.py` | `open_calibration()` — loads the two calibration inputs; `find_latest_incident_beam_file()` |
-| I/O | `io/data_io.py` | `save_data()`, `build_measurement_header()` — writes result CSV + metadata header |
+| Analysis | `analysis/mmf.py` | `compute_mmf()` — spectral Mismatch Factor calculation; `load_eqe_spectrum()`/`load_lamp_spectrum()`, `default_ref_cell_file()`/`default_lamp_spectrum_file()` |
+| I/O | `io/data_io.py` | `save_data()`, `build_measurement_header()` — writes result CSV + metadata header; `save_mmf_result()` — writes an MMF result's summary/plot/data files |
 
 ### Callback architecture
 
@@ -165,6 +166,7 @@ These rules are non-negotiable. Apply them to every change, in every file.
 | Electrical Control | SMU bias voltage + compliance, always reset to 0 V when a measurement ends | ✅ Stable |
 | Calibration measurement | Produces a new incident-beam calibration from the external Si71889 cell; felix-only for now | ✅ Stable, verified on real hardware |
 | Advanced Acquisition Settings | Stabilization time; reference-meter mode (direct current vs. voltage-across-shunt) + shunt resistance; felix-only to edit, recorded in saved metadata | ✅ Stable, verified on real hardware |
+| MMF (Mismatch Factor) | Standalone dialog (MMF button, session panel): picks a DUT EQE file + a reference-cell EQE file + a lamp spectrum file, computes the spectral mismatch factor and Jsc against AM1.5GT, plots all four spectra, saves a summary/plot/data-CSV trio | ✅ Implemented 2026-08-19, not yet verified on real hardware/lab files beyond this repo's own saved files |
 | Lock-in EQE / Lock-in Live EQE | Modulated-light EQE workflow | 🚧 Not implemented; menu entries felix-only |
 
 ---

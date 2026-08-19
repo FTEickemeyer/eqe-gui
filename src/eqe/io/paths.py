@@ -50,9 +50,11 @@ def get_paths() -> dict:
     measurements_dir = ensure_dir(_expand_path(path_cfg["measurements_dir"]))
     calibrations_dir = ensure_dir(_expand_path(path_cfg["calibrations_dir"]))
     logs_dir = ensure_dir(_expand_path(path_cfg["logs_dir"]))
+    mmf_data_dir = ensure_dir(_expand_path(path_cfg["mmf_data_dir"]))
 
     return {
         "measurements_dir": measurements_dir,
         "calibrations_dir": calibrations_dir,
         "logs_dir": logs_dir,
+        "mmf_data_dir": mmf_data_dir,
     }
