@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eqe-gui"
-version = "1.0.0"
+version = "1.0.1"
 description = "EQE/IPCE measurement GUI for photovoltaic devices"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,6 +15,25 @@ dependencies = [
     "matplotlib>=3.10,<4",
     "pyserial>=3.5,<4",
     "PyVISA>=1.16,<2",
+    # PyVISA itself only defines the API -- it needs a *backend* to
+    # actually talk to an instrument, and does not ship one. On this dev
+    # machine that's silently supplied by National Instruments' NI-VISA,
+    # a system-level Windows install (visa32.dll/visa64.dll), not
+    # anything pip-installed or declared here -- so `pyvisa.ResourceManager()`
+    # (used unconditionally by keithley2400.py and keithley2000.py's GPIB
+    # path) "just works" here and fails elsewhere with "Could not locate
+    # a VISA implementation" on any machine without NI-VISA (or another
+    # IVI implementation) installed. pyvisa-py is a pure-Python backend
+    # PyVISA automatically falls back to when no system VISA library is
+    # found (confirmed: leaves NI-VISA as the preferred backend
+    # unchanged on this machine, and independently opens this project's
+    # actual serial resources, e.g. ASRL8::INSTR for the Keithley 2400)
+    # -- covers every resource the active keithley2000_2400 profile uses
+    # (both meters are serial/ASRL) without requiring any separate,
+    # non-pip driver install. The keithley2600 fallback profile talks
+    # GPIB, which still needs a real GPIB driver (bundled with NI-VISA or
+    # similar) either way -- pyvisa-py doesn't provide one itself.
+    "pyvisa-py>=0.7,<1",
     "PyYAML>=6.0,<7",
     "fte-analysis-libraries @ git+https://github.com/FTEickemeyer/FTE-analysis-libraries.git@6d17ae96e6a3a8b9a112aff2779e378518ef1bcb",
     # Not imported directly by eqe-gui -- pandas needs it to read the
