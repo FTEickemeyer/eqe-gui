@@ -316,18 +316,19 @@ shared folder for a curated set of reference-cell/lamp files.
 
 Click **Run** to compute it. The graph shows all four spectra together, resampled onto
 the overlap of the three input files' own wavelength ranges (never extrapolated beyond
-what any of them actually measured) — DUT and reference-cell EQE on the left axis,
-the (peak-)normalized lamp and AM1.5GT spectra on the right axis, so you can visually
-compare the simulator's spectral shape against true sunlight. The Results section
-shows the mismatch factor itself and the DUT's AM1.5-equivalent integrated current
-(Jsc), plus the other three Jsc components (DUT/reference cell, under the simulator
-and under AM1.5) for transparency.
+what any of them actually measured) — DUT and reference-cell EQE on the left axis
+(the DUT curve's legend label is its own device/sample name), the lamp and AM1.5GT
+spectra on the right axis (fixed 0-1.1 scale), each normalized to 1 at 680 nm
+(`analysis/mmf.py`'s `NORMALIZE_AT_NM`) so you can visually compare the simulator's
+spectral shape against true sunlight. The Results section shows the mismatch factor
+itself and the DUT's AM1.5-equivalent integrated current.
 
-Click **Save** to write three files, all named `MMF_<cell name>_date<date>_time<time>`
-into the same per-user dated folder every other measurement saves into:
+Click **Save** to write three files, all named `MMF_<cell name>_date<date>_time<time>`,
+into the **same folder as the DUT EQE file** — so an MMF result stays alongside the
+specific scan it was computed from, wherever that happens to live:
 
 - `....csv` — a summary: the three input files used, the integration range, the
-  mismatch factor, and all four Jsc values.
+  mismatch factor, and the DUT's integrated current under AM1.5.
 - `....png` — the graph.
 - `..._data.csv` — the full data behind the graph (the common wavelength grid and all
   four resampled curves).

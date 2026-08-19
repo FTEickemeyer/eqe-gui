@@ -14,8 +14,9 @@ where Jsc_X(Y) is the short-circuit current density of spectrum X's EQE
 integrated against light spectrum Y. See EQESpectrum.mmf() in
 fte_analysis_libraries.Spectrum for the reference implementation this
 mirrors (calc_jsc() is called directly here, not mmf(), only so all four
-Jsc components are available for display/saving without computing them
-twice).
+Jsc components are available on MMFResult without computing them twice --
+only Jsc_DUT(AM1.5) is actually surfaced to the user, as "Integrated
+current", but the other three stay around on the result object).
 
 Three kinds of input files are involved, all plain two-column-or-more CSVs
 (optionally with a "#"-prefixed metadata header, like this app's own saved
@@ -42,6 +43,14 @@ from eqe.io.paths import get_paths
 
 REF_CELLS_SUBDIR = "EQE_ref_cells"
 LAMP_SPECTRA_SUBDIR = "PF_lamp_spectra"
+
+# Wavelength the lamp spectrum and AM1.5GT curves are normalized to (each
+# set to 1 at this point) for the plot's right axis -- this lab's
+# convention, chosen so the two spectral shapes are easy to compare by
+# eye around the middle of a typical scan range. Purely a display choice;
+# does not affect the MMF/Jsc calculation itself, which integrates the
+# un-normalized spectra.
+NORMALIZE_AT_NM = 680.0
 
 # Case-insensitive filename substring used to pick a default lamp spectrum
 # file out of PF_lamp_spectra/ (see default_lamp_spectrum_file()).
@@ -243,7 +252,13 @@ class MMFResult:
     lamp_file: Path
 
 
-def compute_mmf(dut_path, ref_path, lamp_path, delta_nm: float = 0.5) -> MMFResult:
+def compute_mmf(
+    dut_path,
+    ref_path,
+    lamp_path,
+    delta_nm: float = 0.5,
+    normalize_at_nm: float = NORMALIZE_AT_NM,
+) -> MMFResult:
     """
     Compute the mismatch factor (and its four Jsc components) for a DUT
     EQE file against a reference-cell EQE file and a measured lamp
@@ -287,10 +302,13 @@ def compute_mmf(dut_path, ref_path, lamp_path, delta_nm: float = 0.5) -> MMFResu
 
     lamp_plot = lamp_pf.copy()
     lamp_plot.equidist(left=left, right=right, delta=delta_nm)
-    lamp_plot.normalize()
+    # normalize(x_lim=(n, n)) sets the curve's value *at* n (the nearest
+    # available grid point, clamped to [left, right] if n falls outside
+    # it) to 1, rather than the default peak-within-range normalization.
+    lamp_plot.normalize(x_lim=(normalize_at_nm, normalize_at_nm))
 
     am15_plot = spc.DiffSpectrum.am15_nm(left=left, right=right, delta=delta_nm)
-    am15_plot.normalize()
+    am15_plot.normalize(x_lim=(normalize_at_nm, normalize_at_nm))
 
     return MMFResult(
         mmf=float(mmf_value),

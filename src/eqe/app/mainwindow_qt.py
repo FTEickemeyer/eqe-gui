@@ -478,7 +478,6 @@ class MainWindow(QMainWindow):
             self._mmf_dialog = MMFDialog(
                 parent=self,
                 default_dut_path=self._last_saved_eqe_path,
-                get_user=self.session_panel.get_user,
             )
 
         self._mmf_dialog.show()

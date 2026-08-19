@@ -37,22 +37,15 @@ from eqe.analysis.mmf import (
 )
 from eqe.app.widgets.mmf_plot_widget import MMFPlotWidget
 from eqe.io.data_io import save_mmf_result
-from eqe.io.paths import create_user_directory, get_paths
+from eqe.io.paths import get_paths
 
 
 class MMFDialog(QDialog):
-    def __init__(self, parent=None, default_dut_path=None, get_user=None):
+    def __init__(self, parent=None, default_dut_path=None):
         super().__init__(parent)
 
         self.setWindowTitle("Mismatch Factor (MMF)")
         self.resize(900, 700)
-
-        # Zero-arg callable returning the current session's user string,
-        # used only at Save time to pick the same per-user dated folder
-        # every other save goes into (see io/paths.py's
-        # create_user_directory()). Defaults to "" so this dialog is also
-        # constructible/testable standalone, without a MainWindow.
-        self._get_user = get_user or (lambda: "")
 
         self._last_result = None
 
@@ -138,10 +131,6 @@ class MMFDialog(QDialog):
         self.jsc_dut_label = QLabel("—")
         results_layout.addRow("Integrated current — DUT @ AM1.5 (mA/cm²)", self.jsc_dut_label)
 
-        self.jsc_details_label = QLabel("—")
-        self.jsc_details_label.setWordWrap(True)
-        results_layout.addRow("Details", self.jsc_details_label)
-
         # --------------------------------------------------
         # Plot
         # --------------------------------------------------
@@ -214,7 +203,6 @@ class MMFDialog(QDialog):
             self.plot_widget.clear()
             self.mmf_label.setText("—")
             self.jsc_dut_label.setText("—")
-            self.jsc_details_label.setText("—")
             return
 
         self._last_result = result
@@ -227,16 +215,11 @@ class MMFDialog(QDialog):
             result.am15_pf_normalized,
             result.left_nm,
             result.right_nm,
+            dut_label=extract_sample_name(result.dut_file),
         )
 
         self.mmf_label.setText(f"{result.mmf:.4f}")
         self.jsc_dut_label.setText(f"{result.jsc_dut_am15:.3f}")
-        self.jsc_details_label.setText(
-            f"DUT @ simulator: {result.jsc_dut_sim:.3f} mA/cm² · "
-            f"Reference @ AM1.5: {result.jsc_ref_am15:.3f} mA/cm² · "
-            f"Reference @ simulator: {result.jsc_ref_sim:.3f} mA/cm² · "
-            f"Integration range: {result.left_nm:.0f}–{result.right_nm:.0f} nm"
-        )
 
         self.status_label.setText("")
         self.save_button.setEnabled(True)
@@ -248,13 +231,15 @@ class MMFDialog(QDialog):
 
         try:
             cell_name = extract_sample_name(self._last_result.dut_file)
-            user_name = (self._get_user() or "").strip() or "user"
-            measurements_dir = Path(get_paths()["measurements_dir"])
-            session_dir = create_user_directory(measurements_dir, user_name)
+            # Saved next to the DUT EQE file itself, not a fresh per-user
+            # dated folder -- keeps an MMF result alongside the specific
+            # scan it was computed from, wherever that happens to live
+            # (this session's default folder, or an older one Browsed to).
+            dut_dir = Path(self._last_result.dut_file).resolve().parent
 
             paths = save_mmf_result(
                 self._last_result,
-                user_dir=session_dir,
+                output_dir=dut_dir,
                 cell_name=cell_name,
                 fig=self.plot_widget.figure,
             )

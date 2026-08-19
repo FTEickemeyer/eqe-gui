@@ -254,17 +254,19 @@ def save_data(
     return fp_ipce
 
 
-def save_mmf_result(result, user_dir, cell_name, fig=None):
+def save_mmf_result(result, output_dir, cell_name, fig=None):
     """
     Save a Mismatch Factor calculation (see analysis/mmf.py's MMFResult)
     as up to three files sharing one timestamped base name, matching this
     app's other "<Prefix>_<name>_date<date>_time<time>" save convention
-    (see save_data() above):
+    (see save_data() above). `output_dir` is typically the DUT EQE file's
+    own folder (see mmf_dialog.py's _on_save()), not a fresh per-user
+    dated one, so an MMF result stays alongside the specific scan it was
+    computed from:
 
     - MMF_<cell>_date..._time....csv -- summary: the three input files
-      used, the integration range, the mismatch factor, and all four Jsc
-      components (DUT/reference cell, under the simulator and under
-      AM1.5).
+      used, the integration range, the mismatch factor, and the DUT's
+      Jsc under AM1.5.
     - MMF_<cell>_date..._time....png -- the graph, if a matplotlib figure
       is given (omitted otherwise).
     - MMF_<cell>_date..._time...._data.csv -- the full data behind the
@@ -275,14 +277,14 @@ def save_mmf_result(result, user_dir, cell_name, fig=None):
     Returns a dict of the paths actually written, keyed "summary",
     "figure" (only if fig was given), and "data".
     """
-    user_dir = Path(user_dir)
+    output_dir = Path(output_dir)
 
     dat_time = str(datetime.datetime.now())
     dat_time_file = dat_time.split(".")[0].replace(":", "-").replace(" ", "_time")
 
     base_name = f"MMF_{cell_name}_date{dat_time_file}"
 
-    fp_summary = user_dir / f"{base_name}.csv"
+    fp_summary = output_dir / f"{base_name}.csv"
     with open(fp_summary, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["Quantity", "Value"])
@@ -292,19 +294,20 @@ def save_mmf_result(result, user_dir, cell_name, fig=None):
         writer.writerow(["Integration range start (nm)", result.left_nm])
         writer.writerow(["Integration range stop (nm)", result.right_nm])
         writer.writerow(["MMF", result.mmf])
-        writer.writerow(["Jsc DUT @ AM1.5 (mA/cm2)", result.jsc_dut_am15])
-        writer.writerow(["Jsc DUT @ simulator (mA/cm2)", result.jsc_dut_sim])
-        writer.writerow(["Jsc reference cell @ AM1.5 (mA/cm2)", result.jsc_ref_am15])
-        writer.writerow(["Jsc reference cell @ simulator (mA/cm2)", result.jsc_ref_sim])
+        # "Integrated current" (not "Jsc") to match this app's existing
+        # terminology for the same quantity elsewhere (a regular scan's
+        # "Integrated current (mA/cm2)" column, the live readout's
+        # "Integrated current" row, and this dialog's own Results label).
+        writer.writerow(["Integrated current DUT @ AM1.5 (mA/cm2)", result.jsc_dut_am15])
 
     paths = {"summary": fp_summary}
 
     if fig is not None:
-        fp_fig = user_dir / f"{base_name}.png"
+        fp_fig = output_dir / f"{base_name}.png"
         fig.savefig(fp_fig, dpi=300, bbox_inches="tight")
         paths["figure"] = fp_fig
 
-    fp_data = user_dir / f"{base_name}_data.csv"
+    fp_data = output_dir / f"{base_name}_data.csv"
     data_df = pd.DataFrame(
         {
             "Wavelength (nm)": result.wavelengths_nm,

@@ -13,6 +13,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from eqe.analysis import mmf
@@ -165,11 +167,16 @@ class ComputeMmfTests(unittest.TestCase):
             "Wavelength (nm),EQE (%)",
             [[w, 25.0] for w in wavelengths],
         )
+        # A ramp, not a constant, so normalize-at-680nm (see
+        # analysis/mmf.py's NORMALIZE_AT_NM) is actually exercised: its
+        # peak (750 nm) is deliberately *not* at the normalization point,
+        # so a peak-normalization bug would show up as max() != 1.0 while
+        # the value at 680 nm would incorrectly not be 1.0 either.
         lamp_wavelengths = list(range(350, 751, 10))
         _write_csv(
             lamp_fp,
             "Wavelength (nm),Spectral photon flux (1/[s m2 nm])",
-            [[w, 1e17] for w in lamp_wavelengths],
+            [[w, float(w) * 1e15] for w in lamp_wavelengths],
         )
         return dut_fp, ref_fp, lamp_fp
 
@@ -215,9 +222,14 @@ class ComputeMmfTests(unittest.TestCase):
             self.assertEqual(len(result.ref_eqe_pct), n)
             self.assertEqual(len(result.lamp_pf_normalized), n)
             self.assertEqual(len(result.am15_pf_normalized), n)
-            # normalize() scales to a max of 1 within the plotted range.
-            self.assertAlmostEqual(max(result.lamp_pf_normalized), 1.0, places=6)
-            self.assertAlmostEqual(max(result.am15_pf_normalized), 1.0, places=6)
+
+            # Normalized *at* 680 nm (NORMALIZE_AT_NM), not to the curve's
+            # peak -- the lamp ramp's actual peak is at 750 nm (outside
+            # this file's own overlap-limited 400-700 nm range anyway),
+            # so this also implicitly confirms it's not peak-normalization.
+            idx_680 = int(np.argmin(np.abs(result.wavelengths_nm - 680.0)))
+            self.assertAlmostEqual(result.lamp_pf_normalized[idx_680], 1.0, places=6)
+            self.assertAlmostEqual(result.am15_pf_normalized[idx_680], 1.0, places=6)
 
     def test_raises_when_wavelength_ranges_dont_overlap(self):
         with tempfile.TemporaryDirectory() as tmp:

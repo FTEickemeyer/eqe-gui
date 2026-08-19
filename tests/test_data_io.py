@@ -191,7 +191,7 @@ class SaveMmfResultTests(unittest.TestCase):
         result = self._make_result()
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
-            paths = data_io.save_mmf_result(result, user_dir=tmp, cell_name="mycell")
+            paths = data_io.save_mmf_result(result, output_dir=tmp, cell_name="mycell")
 
             self.assertIn("summary", paths)
             self.assertIn("data", paths)
@@ -205,7 +205,15 @@ class SaveMmfResultTests(unittest.TestCase):
             self.assertEqual(summary["Lamp spectrum file"], "231128 OrielIV, Gemini180.csv")
             self.assertEqual(summary["Reference cell EQE file"], "EQE_Si1812_date2025-10-23_time12-01-11.csv")
             self.assertAlmostEqual(float(summary["MMF"]), 0.987)
-            self.assertAlmostEqual(float(summary["Jsc DUT @ AM1.5 (mA/cm2)"]), 9.5)
+            self.assertAlmostEqual(
+                float(summary["Integrated current DUT @ AM1.5 (mA/cm2)"]), 9.5
+            )
+            # Only the DUT's AM1.5 integrated current is shown/saved --
+            # the other three Jsc components (DUT @ simulator, reference
+            # cell @ either) are computed but deliberately not surfaced.
+            self.assertNotIn("Jsc DUT @ simulator (mA/cm2)", summary)
+            self.assertNotIn("Jsc reference cell @ AM1.5 (mA/cm2)", summary)
+            self.assertNotIn("Jsc reference cell @ simulator (mA/cm2)", summary)
 
             data_df = pd.read_csv(paths["data"])
             self.assertEqual(list(data_df["Wavelength (nm)"]), [400.0, 410.0, 420.0])
@@ -221,7 +229,7 @@ class SaveMmfResultTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             paths = data_io.save_mmf_result(
-                result, user_dir=tmp, cell_name="mycell", fig=fig
+                result, output_dir=tmp, cell_name="mycell", fig=fig
             )
             self.assertIn("figure", paths)
             self.assertTrue(paths["figure"].exists())
