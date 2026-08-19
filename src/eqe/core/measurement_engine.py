@@ -1,4 +1,6 @@
 import time
+from concurrent.futures import ThreadPoolExecutor
+
 import numpy as np
 import pandas as pd
 
@@ -43,6 +45,52 @@ def _negative_ipce_warning(nm, ipce, bias_enabled, bias_voltage):
         "opposite sign from what the calibration expects; check the "
         "sample's wiring polarity into the test-cell meter."
     )
+
+
+def _measure_simultaneously(reference_meter, test_meter):
+    """
+    Trigger the reference-cell and test-cell current readings as close to
+    simultaneously as possible, so both integrate over (approximately) the
+    same slice of time -- letting common-mode Xenon-lamp fluctuations
+    cancel out of the EQE ratio instead of leaking into it as noise/error.
+
+    The reference and test meters are independent instruments on
+    independent connections (e.g. Keithley 2000 on one serial port,
+    Keithley 2400 on another), so this is software/thread-level overlap,
+    not a hardware trigger: each driver's underlying I/O (pyserial/PyVISA)
+    blocks on the wire and releases the GIL while waiting, so the two
+    `measure_current()` calls genuinely run concurrently in CPython rather
+    than merely interleaving. For a hardware pair that already produces
+    one truly synchronous acquisition per trigger (the Keithley 2600 dual
+    channel, via DualChannelSMUSession), this has no effect on accuracy --
+    the session's internal lock (see dual_channel.py) just makes it safe
+    to call from two threads at once, serving both channels from the same
+    single trigger as before.
+
+    Returns (reference_current_A, test_current_A), both still needing
+    dark-current subtraction by the caller. Propagates whichever
+    exception hits first if either read fails.
+    """
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        ref_future = pool.submit(reference_meter.measure_current)
+        test_future = pool.submit(test_meter.measure_current)
+        return ref_future.result(), test_future.result()
+
+
+def _settle_meters(reference_meter, test_meter, emit_status):
+    """
+    Call each meter's `settle()` hook (see roles.CurrentMeter.settle) once
+    after a wavelength move, before the "real" simultaneous reading pair
+    -- e.g. lets the Keithley 2400's autorange resettle after the signal
+    jumps to a very different magnitude. No-op for meters that don't need
+    it. Best-effort, like the other setup steps around it: a failure here
+    just gets a warning, it doesn't abort the measurement.
+    """
+    for meter in (reference_meter, test_meter):
+        try:
+            meter.settle()
+        except Exception as e:
+            emit_status(f"WARNING: settle() failed: {e}")
 
 
 def interruptible_sleep(duration_s, stop_requested, chunk_s=0.05):
@@ -193,6 +241,11 @@ def perform_measurement(
                         emit_status("Measurement stopped.")
                         break
 
+                # Let each meter settle (e.g. autorange after the signal
+                # jumped to a new wavelength's magnitude) before the real
+                # reading below (see _settle_meters).
+                _settle_meters(reference_meter, test_meter, emit_status)
+
                 # Let the cell's photocurrent settle after the wavelength
                 # move, before reading it (see AdvancedAcquisitionPanel).
                 if stabilization_time_s > 0:
@@ -200,8 +253,9 @@ def perform_measurement(
                         emit_status("Measurement stopped.")
                         break
 
-                intSiref_current = reference_meter.measure_current() - reference_meter.dark_current
-                cell_current = test_meter.measure_current() - test_meter.dark_current
+                raw_ref, raw_cell = _measure_simultaneously(reference_meter, test_meter)
+                intSiref_current = raw_ref - reference_meter.dark_current
+                cell_current = raw_cell - test_meter.dark_current
 
                 if should_stop():
                     emit_status("Measurement stopped.")
@@ -450,6 +504,10 @@ def perform_live_monitoring(
         mono.shutter(True)
         mono.goto_nm(target_nm, on_status=emit_status)
         mono.shutter(False)
+        # Let each meter settle (e.g. autorange after the signal jumped to
+        # a new wavelength's magnitude) before the real reading below
+        # (see _settle_meters).
+        _settle_meters(reference_meter, test_meter, emit_status)
         # Let the cell's photocurrent settle after the wavelength move,
         # before reading it (see AdvancedAcquisitionPanel). Applies both
         # to the initial move and to mid-run wavelength changes.
@@ -526,8 +584,9 @@ def perform_live_monitoring(
                         emit_status(f"Live monitoring wavelength changed to {nm:.0f} nm")
                         move_to(nm)
 
-            intSiref_current = reference_meter.measure_current() - reference_meter.dark_current
-            cell_current = test_meter.measure_current() - test_meter.dark_current
+            raw_ref, raw_cell = _measure_simultaneously(reference_meter, test_meter)
+            intSiref_current = raw_ref - reference_meter.dark_current
+            cell_current = raw_cell - test_meter.dark_current
 
             if getattr(test_meter, "compliance_hit", False):
                 emit_status(f"WARNING: Compliance limit reached at {nm:.0f} nm")

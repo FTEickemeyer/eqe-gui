@@ -28,6 +28,8 @@ per physical instrument and hand out its `.reference_channel` /
 `.test_channel` -- never construct two sessions around the same connection.
 """
 
+import threading
+
 from eqe.core.instruments.roles import CurrentMeter, BiasCurrentMeter
 
 
@@ -41,6 +43,18 @@ class DualChannelSMUSession:
     tested behavior of one simultaneous triggered read per engine
     iteration, regardless of whether the engine reads the reference or the
     test channel first.
+
+    The measurement engine now triggers reference/test-cell reads from two
+    threads at once (see measurement_engine._measure_simultaneously), so
+    `read_channel()` is guarded by a lock: without it, two threads could
+    both see `_fresh=False` and race into `run_dual_measurement()`
+    together. This instrument already produces one genuinely synchronous,
+    same-duration acquisition per trigger, which is exactly what that
+    engine-level concurrency is trying to approximate for the
+    Keithley2000/2400 pair -- so here the lock just makes the existing
+    "one trigger serves both channels" behavior safe to call concurrently;
+    it doesn't need to (and shouldn't) also overlap the two channels' reads
+    the way the 2000/2400 pair does.
     """
 
     def __init__(self, smu):
@@ -48,6 +62,7 @@ class DualChannelSMUSession:
         self._fresh = False
         self._consumed = set()
         self._closed = False
+        self._lock = threading.Lock()
 
     @property
     def smu(self):
@@ -84,13 +99,14 @@ class DualChannelSMUSession:
             self._consumed = set()
 
     def read_channel(self, channel: str) -> float:
-        self._ensure_measured()
-        self._consumed.add(channel)
-        if len(self._consumed) >= 2:
-            # Both channels have been read for this cycle -- next read
-            # triggers a fresh synchronized acquisition.
-            self._fresh = False
-        return self._smu.chA if channel == "A" else self._smu.chB
+        with self._lock:
+            self._ensure_measured()
+            self._consumed.add(channel)
+            if len(self._consumed) >= 2:
+                # Both channels have been read for this cycle -- next read
+                # triggers a fresh synchronized acquisition.
+                self._fresh = False
+            return self._smu.chA if channel == "A" else self._smu.chB
 
     @property
     def compliance_hit(self) -> bool:

@@ -23,8 +23,13 @@ Source mode: voltage
 Sense function: current
 Current range: autorange (the EQE current can vary strongly with
 wavelength, especially near the start of a scan -- do not turn this off)
-Current NPLC: 1
-Averaging: performed in Python (default 3 samples)
+Current NPLC: 5, samples: 1 (see config_default.yaml) -- matches the
+reference meter's Keithley 2000 (also NPLC=5, one reading), so the two
+integrate over the same duration when the engine reads them
+simultaneously (see measurement_engine._measure_simultaneously). Autorange
+resettling after a wavelength move is handled once per move via
+`settle()`, not via extra averaged samples per reading (see
+`discard_first_reading` / `settle()` below).
 
 Safety / compliance behavior
 ------------------------------
@@ -102,7 +107,12 @@ class Keithley2400EQE(BiasCurrentMeter):
             Delay between bias-ramp steps in seconds.
         discard_first_reading
             If True, discard one reading before the readings used for the
-            average. Useful when the current autorange changes with wavelength.
+            average -- on every call to `measure_current()`. Useful when the
+            current autorange changes with wavelength, but the EQE engine
+            instead calls `settle()` once per wavelength move for that (see
+            `settle()`) and sets this False (see config_default.yaml), so
+            reference/test-cell readings can be triggered simultaneously.
+            Default True here for any other standalone caller.
         compliance_fraction
             Fraction of the programmed compliance above which a measurement is
             considered "at or near compliance". Default: 0.98.
@@ -470,6 +480,34 @@ class Keithley2400EQE(BiasCurrentMeter):
         mean, near_compliance = self.read_current(return_status=True)
         self.compliance_hit = near_compliance
         return mean
+
+    def settle(self) -> None:
+        """
+        CurrentMeter role hook (see roles.py): take one throwaway reading
+        so current autorange (kept ON, see configure()) has a chance to
+        settle after a wavelength move jumps the signal to a very
+        different magnitude, before the "real" reading taken right after
+        this call.
+
+        Replaces the old per-*reading* `discard_first_reading` behavior
+        (see `read_current()`): that discarded a reading before every
+        single average, which is wasteful once a wavelength is no longer
+        changing, and it also meant the reference and test-cell readings
+        couldn't be triggered together (see
+        measurement_engine._measure_simultaneously) since the test meter
+        always did one extra round-trip first. The engine now calls this
+        once per wavelength move instead (see config_default.yaml's
+        `discard_first_reading: false` for the EQE profile).
+
+        Best-effort: a communication failure here just means the settling
+        read didn't happen. The real reading right after this call will
+        surface any actual problem on its own.
+        """
+        self._check_connection()
+        try:
+            self.instrument.query(":READ?")
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Runtime settings

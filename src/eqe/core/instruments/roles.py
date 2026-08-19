@@ -51,6 +51,18 @@ class CurrentMeter(ABC):
         """
         return None
 
+    def settle(self):
+        """
+        Optional hook: take (and discard) whatever throwaway reading a
+        driver needs so it's ready for an accurate "real" reading right
+        afterward -- e.g. letting autorange resettle after a wavelength
+        move jumps the signal to a very different magnitude. Called once
+        per wavelength move by the measurement engine, not once per
+        reading (see measurement_engine.py) -- most meters need nothing
+        here. Default: no-op.
+        """
+        return None
+
 
 class BiasCurrentMeter(CurrentMeter):
     """A CurrentMeter that can also source a DC bias voltage."""

@@ -177,7 +177,14 @@ Done (kept here for context, not to be redone): live mode has its own time-domai
 buffers and plot infra separate from scan mode; live-mode CSV logging of time/
 wavelength/EQE/currents; an Advanced Acquisition Settings panel exists (stabilization
 time, reference-meter mode/shunt resistance — extend it, don't replace it, for future
-acquisition parameters), felix-only to edit (see Hard Constraints).
+acquisition parameters), felix-only to edit (see Hard Constraints); reference-cell and
+test-cell currents are now read simultaneously (added 2026-08-19, see
+`measurement_engine._measure_simultaneously` and `CurrentMeter.settle()` in
+`instruments/roles.py`) instead of sequentially, so a fluctuating Xenon lamp affects
+both readings the same way and mostly cancels out of the EQE ratio — the Keithley 2400
+test meter's NPLC/samples now match the Keithley 2000 reference meter's (both NPLC=5,
+one reading) so the two integrate over the same duration too; extend both instruments'
+config together if either changes.
 
 Note: the reference meter's "Current (direct)"/"Voltage (shunt)" mode (see
 keithley2000.py's `mode`) is a *software* setting that must match the instrument's

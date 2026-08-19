@@ -58,12 +58,30 @@ instruments:
           type: serial
           resource: "ASRL8::INSTR"
           baud_rate: 9600
-        nplc: 1.0
-        samples: 3
+        # NPLC=5, samples=1 (was NPLC=1, samples=3): matches the reference
+        # meter's Keithley 2000 above exactly, so a single reading on each
+        # instrument covers the same integration duration. Combined with
+        # the measurement engine now triggering both reads from two
+        # threads at once (perform_measurement/perform_live_monitoring's
+        # _measure_simultaneously), the reference and test-cell currents
+        # are read over (approximately) the same slice of time instead of
+        # sequentially, one after the other -- so a fluctuating Xenon lamp
+        # affects both readings the same way and mostly cancels out of the
+        # EQE ratio, rather than leaking in as noise. Added 2026-08-19.
+        nplc: 5.0
+        samples: 1
         current_compliance: 0.01
         ramp_steps: 10
         ramp_delay_s: 0.05
-        discard_first_reading: true
+        # False (was true): letting every single reading discard one
+        # extra sample made this meter always take longer than the
+        # reference meter and, more importantly, meant it could never be
+        # triggered at the same instant as the reference read (see above).
+        # Autorange resettling after a wavelength move is now handled
+        # once per move instead, via settle() (see keithley2400.py) --
+        # called by the engine right after each wavelength move, before
+        # the simultaneous "real" reading pair.
+        discard_first_reading: false
         # Match the Keithley 2600 path's near-compliance warning threshold
         # (smu.py hardcodes 0.95 -- protected/untouched). The 2400 driver
         # defaults to 0.98 standalone; overridden here so a scan reports a
@@ -73,8 +91,8 @@ instruments:
         # The connection is kept open across scans (no reconnect between
         # measurements). If a new scan starts at a much smaller current
         # than the previous one ended at, current autorange can take
-        # several range steps to settle on the first (discarded) reading
-        # -- longer than the driver's standalone 5 s default comfortably
+        # several range steps to settle on the first settle() reading --
+        # longer than the driver's standalone 5 s default comfortably
         # covers. Give it more headroom here.
         timeout_ms: 15000
 

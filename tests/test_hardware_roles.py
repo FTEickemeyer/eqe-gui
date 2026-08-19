@@ -11,6 +11,7 @@ No real instruments are used -- everything here talks to fakes/mocks.
 
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -25,7 +26,11 @@ from eqe.core.instruments.dual_channel import (
     DualChannelReferenceMeter,
     DualChannelTestMeter,
 )
-from eqe.core.measurement_engine import perform_measurement, perform_live_monitoring
+from eqe.core.measurement_engine import (
+    perform_measurement,
+    perform_live_monitoring,
+    _measure_simultaneously,
+)
 
 
 # ---------------------------------------------------------------------
@@ -58,6 +63,7 @@ class FakeCurrentMeter(CurrentMeter):
         self.dark_current = dark_current
         self.connected = False
         self.measure_count = 0
+        self.settle_count = 0
 
     def connect(self):
         self.connected = True
@@ -69,6 +75,9 @@ class FakeCurrentMeter(CurrentMeter):
         self.measure_count += 1
         return self.value
 
+    def settle(self):
+        self.settle_count += 1
+
 
 class FakeBiasCurrentMeter(BiasCurrentMeter):
     """Minimal test-cell-role fake with bias/compliance bookkeeping."""
@@ -78,6 +87,7 @@ class FakeBiasCurrentMeter(BiasCurrentMeter):
         self.dark_current = dark_current
         self.connected = False
         self.measure_count = 0
+        self.settle_count = 0
         self.bias_voltage = None
         self.compliance_current = None
         self.output_enabled = False
@@ -92,6 +102,9 @@ class FakeBiasCurrentMeter(BiasCurrentMeter):
     def measure_current(self) -> float:
         self.measure_count += 1
         return self.value
+
+    def settle(self):
+        self.settle_count += 1
 
     def set_bias_voltage(self, voltage: float):
         self.bias_voltage = voltage
@@ -452,6 +465,126 @@ class StabilizationTimeTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------
+# Simultaneous reference/test-cell reads: both must be triggered close
+# enough together that a fluctuating Xenon lamp affects them the same
+# way, so it cancels out of the EQE ratio instead of leaking in as noise
+# (see _measure_simultaneously in measurement_engine.py).
+# ---------------------------------------------------------------------
+
+class SimultaneousReadTests(unittest.TestCase):
+    def test_measure_simultaneously_overlaps_both_reads(self):
+        # A 2-party barrier only releases once *both* threads arrive. If
+        # _measure_simultaneously triggered the two reads sequentially
+        # instead of concurrently, the second call's wait() would time
+        # out (BrokenBarrierError) because nothing else ever reaches it.
+        barrier = threading.Barrier(2, timeout=2.0)
+
+        class BarrierCurrentMeter(FakeCurrentMeter):
+            def measure_current(self):
+                barrier.wait()
+                return super().measure_current()
+
+        class BarrierBiasCurrentMeter(FakeBiasCurrentMeter):
+            def measure_current(self):
+                barrier.wait()
+                return super().measure_current()
+
+        reference_meter = BarrierCurrentMeter(value=1e-6)
+        test_meter = BarrierBiasCurrentMeter(value=2e-6)
+
+        ref_current, test_current = _measure_simultaneously(reference_meter, test_meter)
+
+        self.assertEqual(ref_current, 1e-6)
+        self.assertEqual(test_current, 2e-6)
+
+    def test_measure_simultaneously_propagates_either_side_exception(self):
+        reference_meter = FakeCurrentMeter(value=1e-6)
+        test_meter = ExplodingBiasCurrentMeter()  # raises starting its 2nd call
+
+        # First cycle: exploding meter's 1st reading, still succeeds.
+        _measure_simultaneously(reference_meter, test_meter)
+        # Second cycle: exploding meter's 2nd reading raises, and that
+        # exception must propagate out of _measure_simultaneously.
+        with self.assertRaises(RuntimeError):
+            _measure_simultaneously(reference_meter, test_meter)
+
+
+# ---------------------------------------------------------------------
+# settle(): the CurrentMeter role hook that replaces the old
+# per-reading discard_first_reading behavior (see keithley2400.py) --
+# called once per wavelength move, not once per reading, so the "real"
+# reference/test-cell readings can be triggered simultaneously.
+# ---------------------------------------------------------------------
+
+class SettleHookTests(unittest.TestCase):
+    def _calibration_df(self, wavelengths):
+        return pd.DataFrame(
+            {"incident beam current (A)/intSiref current (A)": [1.0] * len(wavelengths)},
+            index=list(wavelengths),
+        )
+
+    def test_scan_mode_settles_once_per_point(self):
+        mono = FakeMonochromator()
+        reference_meter = FakeCurrentMeter()
+        test_meter = FakeBiasCurrentMeter()
+        hardware = MeasurementHardware(
+            reference_meter=reference_meter, test_meter=test_meter, monochromator=mono
+        )
+        df_incbeamcurr = self._calibration_df(range(400, 421, 10))
+
+        perform_measurement(
+            hardware,
+            df_incbeamcurr,
+            calibration_measurement=False,
+            nm_lim=(400, 420),
+            delta_nm=10,
+        )
+
+        # 3 points (400, 410, 420) -- one wavelength move, one settle(),
+        # each.
+        self.assertEqual(reference_meter.settle_count, 3)
+        self.assertEqual(test_meter.settle_count, 3)
+
+    def test_live_mode_settles_only_on_actual_wavelength_changes(self):
+        mono = FakeMonochromator()
+        reference_meter = FakeCurrentMeter(value=1e-6)
+        test_meter = FakeBiasCurrentMeter(value=2e-6)
+        hardware = MeasurementHardware(
+            reference_meter=reference_meter, test_meter=test_meter, monochromator=mono
+        )
+        df_incbeamcurr = self._calibration_df(range(400, 601, 10))
+
+        # Same targets/stop pattern as
+        # StabilizationTimeTests.test_live_monitoring_waits_after_initial_and_mid_run_moves:
+        # stays at the initial 550, then one real move to 600.
+        targets = iter([550, 600, 600])
+
+        def get_target_wavelength():
+            return next(targets, 600)
+
+        calls = {"n": 0}
+
+        def stop_requested():
+            calls["n"] += 1
+            return calls["n"] > 3
+
+        perform_live_monitoring(
+            hardware,
+            df_incbeamcurr,
+            wavelength_nm=550,
+            stop_requested=stop_requested,
+            update_interval_s=0,
+            get_target_wavelength=get_target_wavelength,
+        )
+
+        # One settle() for the initial move to 550, one more for the
+        # single change to 600 -- not once per reading (5 readings occur
+        # in this run, well above the 2 settle() calls expected).
+        self.assertEqual(reference_meter.settle_count, 2)
+        self.assertEqual(test_meter.settle_count, 2)
+
+
+# ---------------------------------------------------------------------
 # Automatic "latest calibration" selection (analysis/calibration.py)
 # ---------------------------------------------------------------------
 
@@ -600,6 +733,31 @@ class DualChannelSessionTests(unittest.TestCase):
 
         test_meter.output_off()
         self.assertFalse(smu.output_enabled)
+
+
+class DualChannelConcurrencySafetyTests(unittest.TestCase):
+    """
+    The engine now triggers reference/test-cell reads from two threads at
+    once (see _measure_simultaneously), so a session shared between the
+    two channels (Keithley 2600 / SimulatedSMU) must stay safe under
+    that -- one trigger per cycle, never doubled by the two threads
+    racing into `_ensure_measured()` together (see the lock added to
+    DualChannelSMUSession).
+    """
+
+    def test_concurrent_reads_do_not_double_trigger(self):
+        smu = FakeDualChannelSMU()
+        session = DualChannelSMUSession(smu)
+        reference_meter = DualChannelReferenceMeter(session)
+        test_meter = DualChannelTestMeter(session)
+
+        for _ in range(50):
+            ref_val, test_val = _measure_simultaneously(reference_meter, test_meter)
+            self.assertEqual(ref_val, smu.chA)
+            self.assertEqual(test_val, smu.chB)
+
+        # One trigger per cycle -- never doubled by the concurrent reads.
+        self.assertEqual(smu.trigger_count, 50)
 
 
 # ---------------------------------------------------------------------
