@@ -3,6 +3,17 @@ paths:
   calibrations_dir: ~/Documents/EQE/calibrations
   logs_dir: ~/AppData/Local/eqe/logs
 
+# Whether the application log (paths.logs_dir above -- both the Status/Log
+# panel's persisted history and any structured entries) is written to disk
+# at all. On by default. Turn off only if you have a specific reason not
+# to persist it (e.g. disk space, privacy) -- see README's "Logging"
+# section. This does NOT affect the separate startup/crash log
+# (~/.eqe/eqe_gui.log), which always stays on since the windowed launcher
+# depends on it having somewhere to send diagnostics when there's no
+# console to print to.
+logging:
+  enabled: true
+
 calibration:
   reference_cell_file: 71889_L_IPCE_NIST.csv
   active_incident_beam_file: null

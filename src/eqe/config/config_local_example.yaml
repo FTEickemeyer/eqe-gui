@@ -26,3 +26,11 @@ calibration:
   # produced incbeamcurr_*.csv in calibrations_dir automatically. Set it
   # to a specific filename only to pin a particular calibration instead.
   active_incident_beam_file: null
+
+# Example: turn off the application log entirely (both the Status/Log
+# panel's persisted history and structured measurement entries -- see
+# README's "Logging" section). On by default; uncomment only if you have
+# a specific reason not to persist it. Does not affect the separate
+# startup/crash log (~/.eqe/eqe_gui.log), which always stays on.
+# logging:
+#   enabled: false

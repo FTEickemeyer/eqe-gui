@@ -193,11 +193,28 @@ Notes:
 - Both are plain append-only text files — safe to delete anytime, individually or the
   whole folder. The program just creates a fresh one the next time it writes; nothing
   is lost by deleting an old one.
-- There is currently no setting to turn logging off, and no automatic rotation/cleanup
-  — old daily files accumulate until someone deletes them.
+- There is no automatic rotation/cleanup — old daily files accumulate until someone
+  deletes them.
 - If you want a *shared* location (e.g. so logs land somewhere a colleague or admin
   can check without asking each user for their file), point `paths.logs_dir` at a
   shared/network path in `config_local.yaml` — see [Configuration](#configuration).
+
+### Turning the application log off
+
+The Status/Log history (and the structured measurement entries `append_to_log()`
+writes) can be turned off entirely via `config_local.yaml`:
+
+```yaml
+logging:
+  enabled: false
+```
+
+The log is **on by default** (`logging.enabled: true`); set this to `false` only if you
+have a specific reason not to persist it (disk space, privacy, etc.). This does **not** affect
+the separate crash/startup log (`eqe_gui.log`) — that one always stays on, since the
+windowed launcher depends on it having somewhere to send diagnostics when there's no
+console to print to. See [`config_local_example.yaml`](src/eqe/config/config_local_example.yaml)
+for a ready-to-uncomment example.
 
 ## Calibration
 

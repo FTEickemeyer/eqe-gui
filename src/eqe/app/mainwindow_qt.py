@@ -805,10 +805,12 @@ class MainWindow(QMainWindow):
         touch each of its many call sites individually.
 
         Shares the same daily application log file as append_to_log()'s
-        structured measurement entries (see io/logging.py) -- writing here
-        must never be allowed to crash the GUI over a message that already
-        displayed fine on screen, so failures (e.g. an unwritable
-        logs_dir) are swallowed.
+        structured measurement entries (see io/logging.py), and respects
+        the same config's logging.enabled off-switch (see
+        io/logging.py's is_enabled()) -- writing here must never be
+        allowed to crash the GUI over a message that already displayed
+        fine on screen, so failures (e.g. an unwritable logs_dir) are
+        swallowed.
         """
 
         try:
