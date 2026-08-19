@@ -53,16 +53,21 @@ class MMFPlotWidget(QWidget):
         # name (see update_curves()'s dut_label) -- "EQE DUT" here is
         # only the placeholder shown before a first Run.
         (self.dut_line,) = self.ax.plot(
-            [], [], color="tab:blue", linestyle="-", label="EQE DUT"
+            [], [], color="red", linestyle="-", label="EQE DUT"
         )
         (self.ref_line,) = self.ax.plot(
             [], [], color="tab:green", linestyle="--", label="EQE reference cell"
         )
+        # Fine (0.5 pt) solid lines for both spectra on the right axis --
+        # distinguishes them visually from the thicker EQE curves on the
+        # left axis and from each other by color only, not by dashing.
         (self.lamp_line,) = self.ax2.plot(
-            [], [], color="orange", linestyle="-", label="Lamp spectrum (norm.)"
+            [], [], color="orange", linestyle="-", linewidth=0.5,
+            label="Lamp spectrum (norm.)",
         )
         (self.am15_line,) = self.ax2.plot(
-            [], [], color="black", linestyle="--", label="AM1.5GT (norm.)"
+            [], [], color="black", linestyle="-", linewidth=0.5,
+            label="AM1.5GT (norm.)",
         )
 
         self._update_legend()
