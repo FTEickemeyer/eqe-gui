@@ -15,6 +15,7 @@ Main area:
 
 """
 
+from importlib.metadata import version, PackageNotFoundError
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -25,6 +26,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QLabel,
     QGroupBox,
+    QMessageBox,
 )
 from PySide6.QtCore import Qt, Signal
 
@@ -69,7 +71,7 @@ class MainWindow(QMainWindow):
     point_acquired_signal = Signal(float, float, float)
 
     # Signal used to update the live numeric panel safely in the GUI thread
-    live_numeric_signal = Signal(float, float, float, float)
+    live_numeric_signal = Signal(float, float, float, float, float)
 
     # Signal used to forward a calibration-measurement point (wavelength,
     # reference current, cell current -- no EQE) safely to the GUI thread
@@ -193,13 +195,17 @@ class MainWindow(QMainWindow):
         cell) identifier, and the scan range with the full 350-1170 nm
         range a calibration measurement always covers regardless of what
         the Start/Stop fields say (see nm_lim_ok()'s calibration branch),
-        when "Calibration measurement" is checked.
+        when "Calibration measurement" is checked. Unchecking it restores
+        the standard (non-calibration) spectral scan settings, so the
+        full-range/Si71889 setup doesn't linger into the next regular scan.
         """
 
         if checked:
             self.metadata_panel.sample_name_edit.setText("Si71889")
-            self.scan_panel.start_nm_spin.setValue(350)
-            self.scan_panel.stop_nm_spin.setValue(1170)
+            self.scan_panel.start_nm_spin.setValue(self.scan_panel.MIN_NM)
+            self.scan_panel.stop_nm_spin.setValue(self.scan_panel.MAX_NM)
+        else:
+            self.scan_panel.reset_to_defaults()
 
     def _on_mode_changed(self, mode):
         """
@@ -447,6 +453,29 @@ class MainWindow(QMainWindow):
         """
         self._save_last_result()
 
+    def _on_about(self):
+        """
+        Show the About dialog (version number, mainly to make it easy to
+        confirm which build is installed -- see README's Installation
+        section for the `pip install --upgrade` command that fetches the
+        latest one). Reads the version pip actually installed rather than
+        a hardcoded string, so it can't drift out of sync with
+        pyproject.toml's `version`.
+        """
+        try:
+            app_version = version("eqe-gui")
+        except PackageNotFoundError:
+            app_version = "unknown (not installed as a package)"
+
+        QMessageBox.about(
+            self,
+            "About EQE GUI",
+            f"<b>EQE GUI</b><br>Version {app_version}<br><br>"
+            "EQE/IPCE measurement GUI for photovoltaic devices.<br>"
+            "<a href=\"https://github.com/FTEickemeyer/eqe-gui\">"
+            "github.com/FTEickemeyer/eqe-gui</a>",
+        )
+
     def _save_last_result(self):
         """
         Save the last completed measurement. Shared by the manual Save
@@ -633,7 +662,16 @@ class MainWindow(QMainWindow):
         time_s = kwargs.get("time_s", None) if kwargs else None
         fixed_wavelength_nm = kwargs.get("fixed_wavelength_nm", None) if kwargs else None
 
+        # In a live mode, `wavelength` is actually elapsed time (see
+        # perform_live_monitoring()'s on_point_acquired call) -- the
+        # fixed wavelength actually being measured is fixed_wavelength_nm
+        # instead. A scan's `wavelength` is already the real value.
+        display_wavelength = (
+            fixed_wavelength_nm if fixed_wavelength_nm is not None else wavelength
+        )
+
         self.live_numeric_signal.emit(
+            float(display_wavelength),
             float(eqe),
             float(cell_current),
             float(ref_current),
@@ -693,12 +731,13 @@ class MainWindow(QMainWindow):
         )
 
 
-    def _handle_live_numeric_gui(self, eqe, cell_current, ref_current, integrated_current):
+    def _handle_live_numeric_gui(self, wavelength, eqe, cell_current, ref_current, integrated_current):
         """
         Update the live numeric panel in the GUI thread.
         """
 
         self.live_numeric_panel.update_values(
+            float(wavelength),
             float(eqe),
             float(cell_current),
             float(ref_current),
@@ -728,7 +767,7 @@ class MainWindow(QMainWindow):
         # EQE/integrated-current rows are hidden for a calibration
         # measurement (see _configure_plots_for_mode()); pass 0.0
         # placeholders for them.
-        self.live_numeric_panel.update_values(0.0, cell_current, ref_current, 0.0)
+        self.live_numeric_panel.update_values(wavelength, 0.0, cell_current, ref_current, 0.0)
 
 
     def _reset_plots(self):
@@ -860,6 +899,7 @@ class MainWindow(QMainWindow):
         self.session_panel.start_clicked.connect(self._on_start)
         self.session_panel.stop_clicked.connect(self._on_stop)
         self.session_panel.save_clicked.connect(self._on_save)
+        self.session_panel.about_clicked.connect(self._on_about)
 
         main_layout.addWidget(self.session_panel)
 

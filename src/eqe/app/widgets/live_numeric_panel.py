@@ -4,6 +4,8 @@ Live numeric readout panel.
 Displays real-time measurement values during EQE measurements.
 
 Initial values displayed:
+- wavelength (the wavelength actually being measured right now -- for a
+  live mode this is the fixed measurement wavelength, not elapsed time)
 - EQE (%)
 - test cell current (whatever's in the sample position -- the sample
   itself normally, or the external Si71889 cell during a calibration
@@ -13,7 +15,6 @@ Initial values displayed:
 - integrated current
 
 Later extensions:
-- wavelength
 - lock-in amplitude/phase
 """
 
@@ -38,6 +39,13 @@ class LiveNumericPanel(QWidget):
 
         layout = QFormLayout()
         self.setLayout(layout)
+
+        # -----------------------------
+        # Wavelength
+        # -----------------------------
+
+        self.wavelength_label = QLabel("--- nm")
+        layout.addRow("Wavelength", self.wavelength_label)
 
         # -----------------------------
         # EQE
@@ -94,11 +102,12 @@ class LiveNumericPanel(QWidget):
         if label is not None:
             label.setVisible(visible)
 
-    def update_values(self, eqe, cell_current, ref_current, integrated_current=0.0):
+    def update_values(self, wavelength_nm, eqe, cell_current, ref_current, integrated_current=0.0):
         """
         Update displayed measurement values.
         """
 
+        self.wavelength_label.setText(f"{wavelength_nm:.1f} nm")
         self.eqe_label.setText(f"{eqe:.3f} %")
         self.cell_current_label.setText(f"{cell_current:.3e} A")
         self.ref_current_label.setText(f"{ref_current:.3e} A")

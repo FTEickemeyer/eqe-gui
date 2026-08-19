@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal
 
+from eqe.utils.validation import NM_MIN, NM_MAX
+
 
 class WavelengthSettingPanel(QWidget):
     """
@@ -38,7 +40,7 @@ class WavelengthSettingPanel(QWidget):
 
         self.wavelength_nm_spin = QDoubleSpinBox()
 
-        self.wavelength_nm_spin.setRange(350, 1200)
+        self.wavelength_nm_spin.setRange(NM_MIN, NM_MAX)
         self.wavelength_nm_spin.setDecimals(1)
         self.wavelength_nm_spin.setValue(550)
 

@@ -37,6 +37,7 @@ class SessionPanel(QWidget):
     stop_clicked = Signal()
     save_clicked = Signal()
     user_changed = Signal(str)
+    about_clicked = Signal()
 
     def __init__(self):
         super().__init__()
@@ -125,8 +126,16 @@ class SessionPanel(QWidget):
         self.stop_button.clicked.connect(self.stop_clicked.emit)
         self.save_button.clicked.connect(self.save_clicked.emit)
 
-        # Push widgets to the left
+        # Push widgets to the left, "About" to the far right
         layout.addStretch()
+
+        # --------------------------------------------------
+        # About
+        # --------------------------------------------------
+
+        self.about_button = QPushButton("About")
+        layout.addWidget(self.about_button)
+        self.about_button.clicked.connect(self.about_clicked.emit)
 
     # Users for whom development-only controls (simulation, unimplemented
     # modes) are shown. Case-insensitive.
