@@ -472,13 +472,16 @@ class MainWindow(QMainWindow):
         Open the Mismatch Factor (MMF) dialog (MMF button). A single
         instance is created on first use and reused (raised, not
         recreated) on later clicks, so repeated results/plots stay
-        available rather than resetting every time.
+        available rather than resetting every time -- but the DUT field
+        always tracks the most recently measured (saved) EQE scan, so
+        it's still up to date if a new one was measured since the dialog
+        was last opened. Empty if nothing has been measured yet this
+        session.
         """
         if self._mmf_dialog is None:
-            self._mmf_dialog = MMFDialog(
-                parent=self,
-                default_dut_path=self._last_saved_eqe_path,
-            )
+            self._mmf_dialog = MMFDialog(parent=self)
+
+        self._mmf_dialog.set_dut_file(self._last_saved_eqe_path)
 
         self._mmf_dialog.show()
         self._mmf_dialog.raise_()

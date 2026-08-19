@@ -1,15 +1,18 @@
 """
 Mismatch Factor (MMF) dialog.
 
-Lets a user pick a DUT EQE file (defaulting to the most recently measured
-one this session, if any), a reference-cell EQE file and a lamp spectrum
-file (both defaulting per analysis/mmf.py's default_*() helpers, from
-paths.mmf_data_dir's two fixed subfolders), run the MMF calculation, see
-the result plotted, and save it.
+Lets a user pick a DUT EQE file, a reference-cell EQE file and a lamp
+spectrum file (both defaulting per analysis/mmf.py's default_*() helpers,
+from paths.mmf_data_dir's two fixed subfolders), run the MMF calculation,
+see the result plotted, and save it.
 
 Non-modal (shown via show(), not exec()) so the main window stays usable
 while this is open -- see mainwindow_qt.py's _on_mmf(), which keeps a
-single instance alive and raises it rather than opening a second one.
+single instance alive and raises it rather than opening a second one,
+but always calls set_dut_file() on it first so the DUT field tracks
+whatever the most recently measured (saved) EQE scan is -- empty if
+nothing's been measured yet -- even on a dialog that's been open for a
+while.
 """
 
 from pathlib import Path
@@ -49,13 +52,14 @@ class MMFDialog(QDialog):
 
         self._last_result = None
 
-        self._build_ui(default_dut_path)
+        self._build_ui()
+        self.set_dut_file(default_dut_path)
 
     # ------------------------------------------------------------
     # UI construction
     # ------------------------------------------------------------
 
-    def _build_ui(self, default_dut_path):
+    def _build_ui(self):
         layout = QVBoxLayout()
         self.setLayout(layout)
 
@@ -65,14 +69,14 @@ class MMFDialog(QDialog):
         layout.addWidget(files_group)
 
         # --------------------------------------------------
-        # DUT EQE file -- free browse, defaults to the most recently
-        # saved EQE-mode measurement this session (if any).
+        # DUT EQE file -- free browse; kept in sync with the most
+        # recently measured (saved) EQE scan by set_dut_file(), called
+        # both here (construction) and by mainwindow_qt.py's _on_mmf()
+        # on every later open too.
         # --------------------------------------------------
         dut_row = QHBoxLayout()
         self.dut_edit = QLineEdit()
         self.dut_edit.setPlaceholderText("no EQE file selected")
-        if default_dut_path:
-            self.dut_edit.setText(str(default_dut_path))
         dut_browse = QPushButton("Browse...")
         dut_browse.clicked.connect(self._browse_dut_file)
         dut_row.addWidget(self.dut_edit)
@@ -159,6 +163,17 @@ class MMFDialog(QDialog):
             idx = self.lamp_combo.findData(str(default_lamp))
             if idx >= 0:
                 self.lamp_combo.setCurrentIndex(idx)
+
+    def set_dut_file(self, path):
+        """
+        Set (or clear, if `path` is None/empty) the DUT EQE file field --
+        used both at construction and, importantly, by
+        mainwindow_qt.py's _on_mmf() on every open of an already-existing
+        dialog, so the default always tracks the most recently measured
+        (saved) EQE scan rather than freezing at whatever it was the
+        first time this dialog happened to be created.
+        """
+        self.dut_edit.setText(str(path) if path else "")
 
     # ------------------------------------------------------------
     # Actions

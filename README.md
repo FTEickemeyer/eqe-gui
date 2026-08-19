@@ -298,9 +298,11 @@ short-circuit current measured under it. The **MMF** button (top-right, next to 
 opens a dialog that computes the standard spectral mismatch correction factor from
 three EQE-vs-wavelength inputs:
 
-- **DUT EQE file** — any of this app's own saved `EQE_*.csv` scan files. Defaults to
-  the most recently *saved* EQE scan this session (blank if none yet) — Browse to pick
-  a different one, including from a previous session.
+- **DUT EQE file** — any of this app's own saved `EQE_*.csv` scan files. Always
+  defaults to the most recently *saved* EQE scan this session (blank if none yet) —
+  re-opening the MMF dialog after measuring something new updates it again, even if
+  the dialog was already open. Browse to pick a different one, including from a
+  previous session.
 - **Reference cell EQE file** — a reference cell's own EQE curve, picked from
   `paths.mmf_data_dir`'s `EQE_ref_cells/` subfolder. Defaults to the most recently
   modified file there.
