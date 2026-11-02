@@ -28,6 +28,18 @@ class Cornerstone130:
         mono.disconnect()
     """
 
+    # command()/query()/_query_numeric() retry up to this many times
+    # (i.e. the first try plus 3 retries) on a comms hiccup -- a write
+    # timeout, an empty reply, or (query/_query_numeric only) a reply
+    # that parses as garbage -- with _COMM_RETRY_DELAY_S between
+    # attempts. Confirmed on real hardware (2026-11-02) that a single
+    # retry wasn't always enough to ride out a longer transient stall on
+    # COM2, even though the very next, unrelated Start always worked
+    # fine -- a short backoff gives a slow moment more room to clear
+    # before giving up and raising MonochromatorCommError.
+    _COMM_ATTEMPTS = 4
+    _COMM_RETRY_DELAY_S = 0.3
+
     def __init__(self, port: str, timeout: int = 5, grating_change_nm: int = 850):
         self.port = port
         self.term_chars = "\r\n"
@@ -97,7 +109,9 @@ class Cornerstone130:
         msg = cmd + " " + " ".join(args)
         resp = ""
         last_error = None
-        for attempt in range(2):
+        for attempt in range(self._COMM_ATTEMPTS):
+            if attempt > 0:
+                time.sleep(self._COMM_RETRY_DELAY_S)
             try:
                 self.write(msg)
                 resp = self.read().rstrip()
@@ -112,8 +126,9 @@ class Cornerstone130:
             if resp:
                 return resp
             # Empty reply -- nothing arrived within the serial read
-            # timeout. One retry (write() flushes the buffers again
-            # first) recovers from a one-off hiccup.
+            # timeout. Retrying (write() flushes the buffers again
+            # first, after a short backoff) recovers from a transient
+            # hiccup.
         raise MonochromatorCommError(
             f"No reply from monochromator on {self.port} to {msg!r} "
             f"after retrying." + (f" ({last_error})" if last_error else "")
@@ -125,7 +140,9 @@ class Cornerstone130:
 
         statement = response = ""
         last_error = None
-        for attempt in range(2):
+        for attempt in range(self._COMM_ATTEMPTS):
+            if attempt > 0:
+                time.sleep(self._COMM_RETRY_DELAY_S)
             try:
                 self.write(msg)
                 statement = self.read().rstrip()
@@ -145,18 +162,20 @@ class Cornerstone130:
 
     def _query_numeric(self, msg: str, parse):
         """
-        query() plus parsing, retried once if `parse` raises. Covers the
+        query() plus parsing, retried if `parse` raises. Covers the
         failure mode query() itself can't detect on its own: a reply
         that's present (so query() returns normally) but not what was
         asked for -- e.g. stale leftover text from an earlier comms
         hiccup (see write()) landing in the response instead of the
         real value. A ValueError/IndexError from `parse` here means the
-        reply wasn't usable; one retry (a fresh query(), which re-flushes
-        the input buffer via write()) recovers from a one-off hiccup
+        reply wasn't usable; retrying (a fresh query(), which re-flushes
+        the input buffer via write()) recovers from a transient hiccup
         instead of propagating a cryptic ValueError.
         """
         last_error = None
-        for attempt in range(2):
+        for attempt in range(self._COMM_ATTEMPTS):
+            if attempt > 0:
+                time.sleep(self._COMM_RETRY_DELAY_S)
             resp = self.query(msg)
             try:
                 return parse(resp)

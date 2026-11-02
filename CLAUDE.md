@@ -251,7 +251,16 @@ partial message queued; and `mono.shutter(True)` moved to be the first line *ins
 always runs regardless of where the failure happens. See
 `test_cleanup_runs_even_if_initial_shutter_call_raises` in `test_hardware_roles.py`.
 `perform_live_monitoring()` didn't have this gap — its own initial `move_to()` call
-was already inside its `try`.
+was already inside its `try`. Even with both those fixes, the same session still hit
+a *second* "No reply ... Write timeout" shortly after (raised cleanly this time,
+cleanup intact — but still an aborted run) — one retry wasn't always enough to ride
+out a longer stall on COM2, even though the very next, unrelated Start always worked
+fine right after. `command()`/`query()`/`_query_numeric()` now retry up to
+`Cornerstone130._COMM_ATTEMPTS` (4) times total with `_COMM_RETRY_DELAY_S` (0.3 s)
+between attempts, instead of one immediate retry — tune these two class attributes
+if real hardware shows it still isn't enough (or is too slow). This raises the ceiling
+on a transient hiccup; it's not a fix for a genuinely broken cable/port, which would
+still exhaust all 4 attempts and raise `MonochromatorCommError` same as before.
 
 Note: the reference meter's "Current (direct)"/"Voltage (shunt)" mode (see
 keithley2000.py's `mode`) is a *software* setting that must match the instrument's

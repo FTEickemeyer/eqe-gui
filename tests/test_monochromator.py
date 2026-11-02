@@ -79,6 +79,10 @@ def make_mono(replies, filter_position=3, write_errors=None):
     mono.grating_change_nm = 850
     mono.filter = filter_position
     mono._com = FakeSerialPort(replies, write_errors=write_errors)
+    # Instance override: skip the real backoff delay between retries so
+    # these tests stay fast -- the retry *count*/behavior is what's
+    # under test, not the real timing.
+    mono._COMM_RETRY_DELAY_S = 0
     return mono
 
 
@@ -96,15 +100,16 @@ class CommandRetryTests(unittest.TestCase):
         self.assertEqual(mono.command("abort"), "OK")
         self.assertEqual(len(mono._com.written), 1)
 
-    def test_retries_once_on_empty_reply(self):
-        # First attempt times out (empty read); second succeeds.
-        mono = make_mono([b"", b"OK\r\n"])
+    def test_retries_on_empty_reply(self):
+        # First three attempts time out (empty read); the fourth succeeds
+        # -- exercises using up all but the last of the 4 total attempts.
+        mono = make_mono([b"", b"", b"", b"OK\r\n"])
         self.assertEqual(mono.command("abort"), "OK")
-        self.assertEqual(len(mono._com.written), 2)
-        # write() flushes before each send, including the retry.
-        self.assertEqual(mono._com.reset_calls, 2)
+        self.assertEqual(len(mono._com.written), 4)
+        # write() flushes before each send, including every retry.
+        self.assertEqual(mono._com.reset_calls, 4)
 
-    def test_retries_once_on_write_timeout(self):
+    def test_retries_on_write_timeout(self):
         # Confirmed on real hardware (2026-11-02): the write() call
         # itself can raise SerialTimeoutException, not just a slow read.
         mono = make_mono(
@@ -114,19 +119,16 @@ class CommandRetryTests(unittest.TestCase):
         self.assertEqual(mono.command("abort"), "OK")
         self.assertEqual(len(mono._com.written), 1)
 
-    def test_raises_after_two_write_timeouts(self):
+    def test_raises_after_exhausting_write_timeout_retries(self):
         mono = make_mono(
             [],
-            write_errors=[
-                serial.SerialTimeoutException("Write timeout"),
-                serial.SerialTimeoutException("Write timeout"),
-            ],
+            write_errors=[serial.SerialTimeoutException("Write timeout")] * 4,
         )
         with self.assertRaises(MonochromatorCommError):
             mono.command("abort")
 
-    def test_raises_after_two_empty_replies(self):
-        mono = make_mono([b"", b""])
+    def test_raises_after_exhausting_empty_reply_retries(self):
+        mono = make_mono([b"", b"", b"", b""])
         with self.assertRaises(MonochromatorCommError):
             mono.command("abort")
 
@@ -138,19 +140,19 @@ class QueryRetryTests(unittest.TestCase):
         self.assertEqual(resp.statement, "WAVE?")
         self.assertEqual(resp.response, "550.000")
 
-    def test_retries_once_when_response_line_is_empty(self):
+    def test_retries_when_response_line_is_empty(self):
         # First attempt: statement arrives but the response line never
         # does (empty read, e.g. a timeout). Second attempt: clean.
         mono = make_mono([b"WAVE?\r\n", b"", b"WAVE?\r\n", b"550.000\r\n"])
         resp = mono.query("wave")
         self.assertEqual(resp.response, "550.000")
 
-    def test_raises_after_persistent_empty_reply(self):
-        mono = make_mono([b"", b"", b"", b""])
+    def test_raises_after_exhausting_empty_reply_retries(self):
+        mono = make_mono([b"", b""] * 4)
         with self.assertRaises(MonochromatorCommError):
             mono.query("wave")
 
-    def test_retries_once_on_write_timeout(self):
+    def test_retries_on_write_timeout(self):
         mono = make_mono(
             [b"WAVE?\r\n", b"550.000\r\n"],
             write_errors=[serial.SerialTimeoutException("Write timeout")],
@@ -175,11 +177,8 @@ class QueryNumericRetryTests(unittest.TestCase):
         ])
         self.assertEqual(mono.filter_wheel_position, 3)
 
-    def test_raises_after_persistent_garbage(self):
-        mono = make_mono([
-            b"FILTER?\r\n", b"SHUTTER C\r\n",
-            b"FILTER?\r\n", b"SHUTTER C\r\n",
-        ])
+    def test_raises_after_exhausting_garbage_retries(self):
+        mono = make_mono([b"FILTER?\r\n", b"SHUTTER C\r\n"] * 4)
         with self.assertRaises(MonochromatorCommError):
             mono.filter_wheel_position
 
