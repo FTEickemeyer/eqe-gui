@@ -221,7 +221,23 @@ framing and crashed with an unrelated-looking `ValueError` from a garbled reply,
 which the serial connection was left in a bad state. `run_measurement_async()`'s own
 "already running" `RuntimeError` guard still exists but fires too late on its own —
 after that hardware I/O already happened — so the real fix had to be earlier, in the
-GUI.
+GUI. That double-click race turned out to be only one way to trigger a worse,
+pre-existing problem confirmed the same evening on real hardware: once the Cornerstone
+130 gave back one empty or garbled reply (also seen from a single, non-concurrent
+Start — a flaky write/cable issue is enough on its own), nothing resynced the serial
+stream afterward, so every later command kept reading stale leftover bytes (e.g. a
+prior shutter command's own echoed text, `'SHUTTER C'`) and kept crashing with an
+unrelated-looking `ValueError`, for the rest of that session. Fixed in
+`monochromator.py` (not `smu.py` — the Keithley driver untouched): `Cornerstone130.
+write()` now flushes the input buffer (`reset_input_buffer()`) before every send, so
+stale bytes from an earlier hiccup can't bleed into the next command instead of
+accumulating forever; `command()`/`query()` retry once on an empty reply; and a new
+`_query_numeric()` helper (used by `grating`/`filter_wheel_position`/`outport`/
+`slit_width`/`position`) retries once more if the reply parses as garbage even though
+it wasn't empty. Exhausting both retries raises `MonochromatorCommError` instead of a
+bare `ValueError`, so a genuine hardware failure reads clearly as one. See
+`tests/test_monochromator.py` (a `FakeSerialPort` test double scripts replies — no
+real hardware involved) for the exact failure modes this covers.
 
 Note: the reference meter's "Current (direct)"/"Voltage (shunt)" mode (see
 keithley2000.py's `mode`) is a *software* setting that must match the instrument's

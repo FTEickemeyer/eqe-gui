@@ -6,6 +6,16 @@ from typing import Dict, Union
 Response = namedtuple("Response", ["statement", "response"])
 
 
+class MonochromatorCommError(RuntimeError):
+    """
+    Raised when the Cornerstone 130 still hasn't given a usable reply
+    after one flush-and-retry (see Cornerstone130.write()/_query_numeric()).
+    Distinct from the ValueError a caller would otherwise get from trying
+    to int()/float() a garbled reply, so it's clear this is a genuine
+    comms failure rather than e.g. a bad argument.
+    """
+
+
 class Cornerstone130:
     """
     Monochromator driver for the Oriel Cornerstone 130.
@@ -51,6 +61,24 @@ class Cornerstone130:
         self._com.close()
 
     def write(self, msg: str) -> int:
+        # Discard anything already sitting in the input buffer before
+        # sending a new command. In a correctly-synced exchange nothing
+        # should be there -- every earlier command()/query() call's own
+        # read(s) already blocked until they consumed a full
+        # terminator-delimited line (or gave up after the serial
+        # timeout). If something IS there anyway -- a short/garbled
+        # reply, or leftover bytes from an earlier comms hiccup --
+        # leaving it would get it misread as part of *this* command's
+        # response, permanently shifting every later read for the rest
+        # of the session instead of just this one call being affected.
+        # Confirmed on real hardware (2026-11-02): once one query got an
+        # empty/garbled reply, every subsequent command kept reading
+        # stale leftover text (e.g. a prior shutter command's own
+        # echo) and crashing with an unrelated-looking ValueError.
+        try:
+            self._com.reset_input_buffer()
+        except Exception:
+            pass
         msg += self.term_chars
         msg = msg.upper()
         msg = msg.encode(self.encoding)
@@ -63,17 +91,60 @@ class Cornerstone130:
     def command(self, cmd: str, *args) -> str:
         args = map(str, args)
         msg = cmd + " " + " ".join(args)
-        self.write(msg)
-        return self.read().rstrip()
+        resp = ""
+        for attempt in range(2):
+            self.write(msg)
+            resp = self.read().rstrip()
+            if resp:
+                return resp
+            # Empty reply -- nothing arrived within the serial read
+            # timeout. One retry (write() flushes the input buffer
+            # again first) recovers from a one-off hiccup.
+        raise MonochromatorCommError(
+            f"No reply from monochromator on {self.port} to {msg!r} "
+            f"after retrying."
+        )
 
     def query(self, msg: str) -> Response:
         if msg[-1] != "?":
             msg += "?"
 
-        self.write(msg)
-        statement = self.read().rstrip()
-        response = self.read().rstrip()
-        return Response(statement=statement, response=response)
+        statement = response = ""
+        for attempt in range(2):
+            self.write(msg)
+            statement = self.read().rstrip()
+            response = self.read().rstrip()
+            if statement and response:
+                return Response(statement=statement, response=response)
+        raise MonochromatorCommError(
+            f"No usable reply from monochromator on {self.port} to "
+            f"{msg!r} after retrying (got statement={statement!r}, "
+            f"response={response!r})."
+        )
+
+    def _query_numeric(self, msg: str, parse):
+        """
+        query() plus parsing, retried once if `parse` raises. Covers the
+        failure mode query() itself can't detect on its own: a reply
+        that's present (so query() returns normally) but not what was
+        asked for -- e.g. stale leftover text from an earlier comms
+        hiccup (see write()) landing in the response instead of the
+        real value. A ValueError/IndexError from `parse` here means the
+        reply wasn't usable; one retry (a fresh query(), which re-flushes
+        the input buffer via write()) recovers from a one-off hiccup
+        instead of propagating a cryptic ValueError.
+        """
+        last_error = None
+        for attempt in range(2):
+            resp = self.query(msg)
+            try:
+                return parse(resp)
+            except (ValueError, IndexError) as e:
+                last_error = e
+        raise MonochromatorCommError(
+            f"Monochromator on {self.port} gave an unusable reply to "
+            f"{msg!r} after retrying ({last_error})."
+        )
 
     # --- high-level methods ---
 
@@ -84,8 +155,7 @@ class Cornerstone130:
 
     @property
     def position(self) -> float:
-        resp = self.query("wave")
-        return float(resp.response)
+        return self._query_numeric("wave", lambda resp: float(resp.response))
 
     def step(self, steps: int):
         self.command("step", steps)
@@ -95,21 +165,22 @@ class Cornerstone130:
 
     @property
     def grating(self) -> Dict[str, Union[str, int]]:
-        resp = self.query("grat")
-        resp = resp.response.split(",")
-        return {
-            "number": int(resp[0]),
-            "lines": int(resp[1]),
-            "label": resp[2],
-        }
+        def parse(resp):
+            parts = resp.response.split(",")
+            return {
+                "number": int(parts[0]),
+                "lines": int(parts[1]),
+                "label": parts[2],
+            }
+
+        return self._query_numeric("grat", parse)
 
     def set_grating(self, grating: int):
         self.command("grat", grating)
 
     @property
     def filter_wheel_position(self) -> int:
-        resp = self.query("filter")
-        return int(resp.response)
+        return self._query_numeric("filter", lambda resp: int(resp.response))
 
     def set_filter(self, pos: int):
         self._validate_filter(pos)
@@ -139,8 +210,7 @@ class Cornerstone130:
 
     @property
     def outport(self) -> int:
-        resp = self.query("outport")
-        return int(resp.response)
+        return self._query_numeric("outport", lambda resp: int(resp.response))
 
     def set_outport(self, port: int):
         self.command("outport", port)
@@ -150,8 +220,7 @@ class Cornerstone130:
         if width is not None:
             self.command(cmd, width)
 
-        resp = self.query(cmd)
-        return int(resp.response)
+        return self._query_numeric(cmd, lambda resp: int(resp.response))
 
     @staticmethod
     def _validate_filter(pos: int) -> bool:
