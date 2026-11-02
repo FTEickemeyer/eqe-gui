@@ -22,7 +22,10 @@ class MeasurementConfig:
 
     sample_name: str
     comments: str
-    cell_area_cm2: float
+    # None if left unset (most users don't set this) -- see
+    # app/widgets/metadata_panel.py's get_values(). Not used in any
+    # calculation, only recorded for reference.
+    cell_area_cm2: float | None
 
     # -----------------------------
     # Scan parameters

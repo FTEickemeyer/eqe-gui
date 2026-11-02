@@ -39,7 +39,10 @@ def _metadata_lines(metadata):
     lines = [
         "# Sample / Metadata:",
         f"#   Sample name: {metadata.get('sample_name', '')}",
-        f"#   Cell area (cm2): {metadata.get('cell_area_cm2', '')}",
+        # cell_area_cm2 is None (not merely absent) when left unset --
+        # `.get(..., '')`'s default only covers a missing key, not an
+        # explicit None, so that needs its own fallback here too.
+        f"#   Cell area (cm2): {metadata.get('cell_area_cm2') or ''}",
     ]
 
     comments = metadata.get("comments", "") or ""
