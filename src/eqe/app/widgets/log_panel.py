@@ -78,7 +78,21 @@ class LogPanel(QWidget):
         """
         Insert a message at the top of the log, so the most recent entry
         is always visible without scrolling.
+
+        A blank/whitespace-only message is silently dropped rather than
+        inserted as an empty line -- some callers (e.g.
+        instruments/monochromator.py's goto_nm(), which emits "" to
+        clear a transient "Switching filter..."/"Switching grating..."
+        status once that step finishes) use on_status("") as a
+        clear-the-status signal with no visible log panel today, so an
+        empty string here carries no information worth a blank row --
+        and, since message_logged mirrors this to the persisted log file
+        (see mainwindow_qt.py's _persist_log_message()), would otherwise
+        also leave a timestamp-only line there.
         """
+
+        if not message or not message.strip():
+            return
 
         cursor = self.log_text.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.Start)
