@@ -206,11 +206,13 @@ class MainWindow(QMainWindow):
     def _on_calibration_toggled(self, checked):
         """
         Pre-fill the sample name with the Si71889 (external calibration
-        cell) identifier, and the scan range with the full 350-1170 nm
-        range a calibration measurement always covers regardless of what
-        the Start/Stop fields say (see nm_lim_ok()'s calibration branch),
-        when "Calibration measurement" is checked. Unchecking it restores
-        the standard (non-calibration) spectral scan settings, so the
+        cell) identifier, the scan range with the full 350-1170 nm range
+        a calibration measurement always covers regardless of what the
+        Start/Stop fields say (see nm_lim_ok()'s calibration branch), and
+        the cell area with the Si71889's own 1 cm2 (not whatever a
+        previous DUT's area was left at), when "Calibration measurement"
+        is checked. Unchecking it restores the standard (non-calibration)
+        spectral scan settings and clears the cell area again, so the
         full-range/Si71889 setup doesn't linger into the next regular scan.
         """
 
@@ -218,8 +220,10 @@ class MainWindow(QMainWindow):
             self.metadata_panel.sample_name_edit.setText("Si71889")
             self.scan_panel.start_nm_spin.setValue(self.scan_panel.MIN_NM)
             self.scan_panel.stop_nm_spin.setValue(self.scan_panel.MAX_NM)
+            self.metadata_panel.set_cell_area_cm2(1.0)
         else:
             self.scan_panel.reset_to_defaults()
+            self.metadata_panel.set_cell_area_cm2(None)
 
     def _on_mode_changed(self, mode):
         """
@@ -920,11 +924,14 @@ class MainWindow(QMainWindow):
             self.calibration_panel.calibration_measurement_checkbox.setChecked(False)
 
         # Advanced Acquisition Settings (stabilization time, reference
-        # meter mode/shunt resistance) are admin-only to *edit* -- greyed
-        # out (not hidden) for everyone else, since a wrong value here
-        # (especially the shunt resistance) silently corrupts every
-        # measurement that follows, but other users still need to see
-        # what's currently configured and are still affected by it.
+        # meter mode/shunt resistance) are admin-only -- hidden entirely
+        # (not just greyed out) for everyone else, same combined
+        # mode-based/admin-gated pattern as the Calibration group above.
+        # Still affects every measurement regardless of who can see/edit
+        # it; setEnabled() stays too, belt-and-suspenders, in case this
+        # group's own visibility rule and the mode-based one above ever
+        # disagree.
+        self.advanced_group.setVisible(sections.get(SECTION_ADVANCED, False) and is_admin)
         self.advanced_acquisition_panel.setEnabled(is_admin)
 
         # Integrated current is only meaningful over a wavelength sweep;

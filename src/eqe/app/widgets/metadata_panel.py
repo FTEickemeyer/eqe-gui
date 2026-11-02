@@ -20,8 +20,8 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QLineEdit,
     QTextEdit,
-    QDoubleSpinBox,
 )
+from PySide6.QtGui import QDoubleValidator
 
 
 class MetadataPanel(QWidget):
@@ -65,30 +65,28 @@ class MetadataPanel(QWidget):
         # --------------------------------------------------
         # Cell area
         # --------------------------------------------------
-        self.cell_area_spin = QDoubleSpinBox()
+        # A plain QLineEdit, not a QDoubleSpinBox: most users don't
+        # actually set this -- it's not used in any calculation (EQE/Jsc
+        # are both area-independent; see measurement_engine.py), only
+        # recorded for reference in the saved file's metadata header
+        # (see io/data_io.py's _metadata_lines()) -- and a spin box
+        # always shows *some* number. A QLineEdit can start genuinely
+        # empty instead (a special-value placeholder like "optional"
+        # looked like real text sitting in the field, which it isn't --
+        # see get_values(), which reports empty as None, and
+        # set_cell_area_cm2(), used by mainwindow_qt.py's
+        # _on_calibration_toggled() to force 1 cm2 during a calibration
+        # measurement).
+        self.cell_area_edit = QLineEdit()
+        validator = QDoubleValidator(0.0, 1000.0, 4, self.cell_area_edit)
+        validator.setNotation(QDoubleValidator.Notation.StandardNotation)
+        self.cell_area_edit.setValidator(validator)
 
-        # Allow a broad range; precision can be refined later
-        self.cell_area_spin.setRange(0.0, 1000.0)
-        self.cell_area_spin.setDecimals(4)
-        self.cell_area_spin.setSingleStep(0.01)
+        layout.addRow("Cell area (cm²)", self.cell_area_edit)
 
-        # Most users don't actually set this -- it's not used in any
-        # calculation (EQE/Jsc are both area-independent; see
-        # measurement_engine.py), only recorded for reference in the
-        # saved file's metadata header (see io/data_io.py's
-        # _metadata_lines()). Leave it unset by default rather than
-        # defaulting to a specific area (1 cm^2) that may not be true:
-        # at the minimum value, show "optional" instead of "0.0000 cm²"
-        # (setSpecialValueText replaces the whole display, suffix
-        # included, only at that one value) -- see get_values(), which
-        # reports this state as None rather than 0.0.
-        self.cell_area_spin.setSpecialValueText("optional")
-        self.cell_area_spin.setValue(self.cell_area_spin.minimum())
-
-        # Show a unit suffix directly in the widget
-        self.cell_area_spin.setSuffix(" cm²")
-
-        layout.addRow("Cell area", self.cell_area_spin)
+    def set_cell_area_cm2(self, value):
+        """Set (or, if None, clear) the Cell area field."""
+        self.cell_area_edit.setText("" if value is None else str(value))
 
     def get_values(self):
         """
@@ -98,10 +96,10 @@ class MetadataPanel(QWidget):
         by a dataclass-based config collection.
         """
 
-        cell_area_cm2 = self.cell_area_spin.value()
-        if cell_area_cm2 == self.cell_area_spin.minimum():
-            # Still showing "optional" -- never actually set, see
-            # _build_ui(). Report as unset rather than a literal 0.
+        cell_area_text = self.cell_area_edit.text().strip()
+        try:
+            cell_area_cm2 = float(cell_area_text) if cell_area_text else None
+        except ValueError:
             cell_area_cm2 = None
 
         return {

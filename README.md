@@ -154,10 +154,11 @@ between launches.
 
 ### Advanced Acquisition Settings
 
-This panel is greyed out (visible, but not editable) unless admin mode is unlocked
-(see above) — a wrong value here, especially the reference meter settings below,
-silently affects every measurement that follows. All settings in this panel are
-recorded in the metadata header of saved files.
+This panel is hidden entirely unless admin mode is unlocked (see above) — a wrong
+value here, especially the reference meter settings below, silently affects every
+measurement that follows, so there's no reason for most users to see or touch it. All
+settings in this panel are recorded in the metadata header of saved files regardless
+of who last changed them.
 
 **Stabilization time** (default 100 ms) is how long the measurement waits after the
 monochromator moves to a new wavelength, before taking a reading — giving the

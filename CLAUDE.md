@@ -165,7 +165,7 @@ These rules are non-negotiable. Apply them to every change, in every file.
 | Live Monitoring (Live EQE) | Fixed-wavelength continuous acquisition, changeable mid-run, real time-series save | ✅ Stable, verified on real hardware |
 | Electrical Control | SMU bias voltage + compliance, always reset to 0 V when a measurement ends | ✅ Stable |
 | Calibration measurement | Produces a new incident-beam calibration from the external Si71889 cell; admin-only (see Admin mode below) | ✅ Stable, verified on real hardware |
-| Advanced Acquisition Settings | Stabilization time; reference-meter mode (direct current vs. voltage-across-shunt) + shunt resistance; admin-only to edit, recorded in saved metadata | ✅ Stable, verified on real hardware |
+| Advanced Acquisition Settings | Stabilization time; reference-meter mode (direct current vs. voltage-across-shunt) + shunt resistance; hidden entirely unless admin mode is unlocked, recorded in saved metadata | ✅ Stable, verified on real hardware |
 | MMF (Mismatch Factor) | Standalone dialog (MMF button, session panel): picks a DUT EQE file + a reference-cell EQE file + a lamp spectrum file, computes the spectral mismatch factor and Jsc against AM1.5GT, plots all four spectra, saves a summary/plot/data-CSV trio | ✅ Implemented 2026-08-19, not yet verified on real hardware/lab files beyond this repo's own saved files |
 | Lock-in EQE / Lock-in Live EQE | Modulated-light EQE workflow | 🚧 Not implemented; menu entries admin-only |
 
