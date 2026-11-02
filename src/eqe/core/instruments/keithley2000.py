@@ -123,10 +123,11 @@ class Keithley2000(CurrentMeter):
         Fixed DC-voltage range in volts, used only when `mode` is
         "voltage_shunt" (autorange is not used for this function -- see
         set_mode()). Default: 0.1 (100 mV) -- comfortably covers the
-        expected signal (e.g. 598 ohm shunt at up to ~7 uA is ~4.2 mV;
-        a future 10 kOhm+ shunt at the same current would be ~70 mV+).
-        Raise this if a larger shunt resistor and/or higher current later
-        pushes the expected drop closer to 100 mV.
+        expected signal (e.g. the current standard 1987 ohm shunt, as of
+        2026-11-02, at up to ~7 uA is ~13.9 mV; a future 10 kOhm+ shunt
+        at the same current would be ~70 mV+). Raise this if a larger
+        shunt resistor and/or higher current later pushes the expected
+        drop closer to 100 mV.
     timeout : float
         Communication timeout in seconds.
     """

@@ -17,9 +17,11 @@ Currently holds:
   resolution for this weak a signal; measuring voltage across a shunt
   instead gives access to much lower (and better-resolution) ranges.
   "Voltage (shunt)" is the default, matching the physical wiring as of
-  2026-08-14 (598 ohm shunt, ~7 uA expected -> ~4.2 mV drop); switch back
-  to "Current" if the shunt is ever removed and the reference meter is
-  rewired back to direct current sensing.
+  2026-08-14 (sensing method/wiring unchanged since). The shunt resistor
+  itself was swapped from 598 ohm to 1987 ohm on 2026-11-02 -- current
+  standard, ~7 uA expected -> ~13.9 mV drop; switch back to "Current" if
+  the shunt is ever removed and the reference meter is rewired back to
+  direct current sensing.
 
 This whole panel is developer-only (felix) to *edit* -- see
 mainwindow_qt.update_mode_visibility() -- since a wrong value here
@@ -100,7 +102,8 @@ class AdvancedAcquisitionPanel(QWidget):
 
         self.shunt_resistance_spin.setRange(1, 1_000_000)
         self.shunt_resistance_spin.setDecimals(1)
-        self.shunt_resistance_spin.setValue(598)
+        # Current standard shunt resistor, as of 2026-11-02 (was 598 ohm).
+        self.shunt_resistance_spin.setValue(1987)
 
         self.shunt_resistance_spin.setSuffix(" Ω")
 

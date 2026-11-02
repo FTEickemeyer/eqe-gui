@@ -158,8 +158,9 @@ reference cell's signal:
 
 - **Voltage (shunt resistor)** — the default, matching the lab's wiring as of
   2026-08-14. The reference cell's photocurrent is read as a voltage drop across a
-  known external shunt resistor (**Shunt resistance**, default 598 Ω) wired to the
-  instrument's Input HI/LO terminals, then converted back to an equivalent current.
+  known external shunt resistor (**Shunt resistance**, default 1987 Ω as of
+  2026-11-02, previously 598 Ω) wired to the instrument's Input HI/LO terminals, then
+  converted back to an equivalent current.
   This exists because the Keithley 2000's DC current function only has one,
   oversized range (10 mA) — far larger than this reference cell's actual signal
   (~10s of nA to a few µA) — giving poor resolution; DC voltage ranges go much
