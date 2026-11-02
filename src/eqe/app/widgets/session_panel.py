@@ -154,6 +154,10 @@ class SessionPanel(QWidget):
         layout.addWidget(self.start_button)
 
         self.stop_button = QPushButton("Stop")
+        # Only meaningful while a measurement is running -- see
+        # mainwindow_qt.py's _on_start()/on_measurement_finished(), which
+        # enable/disable it in lockstep with the Start button.
+        self.stop_button.setEnabled(False)
         layout.addWidget(self.stop_button)
 
         self.save_button = QPushButton("Save")
