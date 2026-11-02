@@ -175,15 +175,22 @@ def perform_measurement(
         emit_status(f"Bias enabled: {bias_voltage:.3f} V")
     else:
         emit_status("Bias disabled")
-    mono.shutter(True)
 
     # ----------------------------------------
-    # Everything from here on is wrapped in the same try/finally as the
-    # measurement loop below: bias can be applied a few lines down, and
-    # the finally block's reset-to-0V must run no matter what happens
-    # afterward -- not just for exceptions raised inside the loop itself.
+    # Everything from here on, including the shutter(True) that used to
+    # sit just before this try -- is wrapped in the same try/finally as
+    # the measurement loop below: bias can be applied a few lines down,
+    # and the finally block's reset-to-0V must run no matter what
+    # happens afterward -- not just for exceptions raised inside the
+    # loop itself. Confirmed on real hardware (2026-11-02): a
+    # SerialTimeoutException from mono.shutter(True) here (a monochromator
+    # write timeout) used to escape before any cleanup ran at all --
+    # bias never reset, test-cell output never disabled, shutter never
+    # reopened, monochromator never returned to 550 nm.
     # ----------------------------------------
     try:
+        mono.shutter(True)
+
         # The test-cell source output must be on to take any current
         # reading (even an unbiased 0 V one) -- unconditionally
         # re-enable it here so a previous scan's end-of-run

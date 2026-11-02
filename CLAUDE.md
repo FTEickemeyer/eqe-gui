@@ -237,7 +237,21 @@ accumulating forever; `command()`/`query()` retry once on an empty reply; and a 
 it wasn't empty. Exhausting both retries raises `MonochromatorCommError` instead of a
 bare `ValueError`, so a genuine hardware failure reads clearly as one. See
 `tests/test_monochromator.py` (a `FakeSerialPort` test double scripts replies — no
-real hardware involved) for the exact failure modes this covers.
+real hardware involved) for the exact failure modes this covers. That same evening,
+real hardware then hit a second variant: `write()` itself (not just a slow/missing
+reply) raised `serial.SerialTimeoutException` straight out of
+`mono.shutter(True)` at the very start of `perform_measurement()` — a line that, at
+the time, ran *before* the function's own `try/finally` even began, so the exception
+skipped bias-reset/output-off/shutter-reopen/return-to-550 cleanup entirely instead of
+just failing that one scan. Fixed two ways: `command()`/`query()` now also catch
+`serial.SerialException` from `write()` itself and retry (not just an empty reply),
+with `write()` flushing the *output* buffer too, in case a write timeout left a
+partial message queued; and `mono.shutter(True)` moved to be the first line *inside*
+`perform_measurement()`'s `try` instead of before it, so the `finally` cleanup now
+always runs regardless of where the failure happens. See
+`test_cleanup_runs_even_if_initial_shutter_call_raises` in `test_hardware_roles.py`.
+`perform_live_monitoring()` didn't have this gap — its own initial `move_to()` call
+was already inside its `try`.
 
 Note: the reference meter's "Current (direct)"/"Voltage (shunt)" mode (see
 keithley2000.py's `mode`) is a *software* setting that must match the instrument's

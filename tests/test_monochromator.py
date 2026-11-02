@@ -18,19 +18,32 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import serial
+
 from eqe.core.instruments.monochromator import Cornerstone130, MonochromatorCommError
 
 
 class FakeSerialPort:
-    """Minimal stand-in for serial.Serial, scripted with queued replies."""
+    """
+    Minimal stand-in for serial.Serial, scripted with queued replies and
+    (optionally) write-time exceptions -- e.g. serial.SerialTimeoutException,
+    confirmed on real hardware (2026-11-02) to be raised by an actual
+    Cornerstone130 write() call, not just a slow/missing read.
+    """
 
-    def __init__(self, replies):
+    def __init__(self, replies, write_errors=None):
         self._replies = list(replies)
+        self._write_errors = list(write_errors) if write_errors else []
         self.written = []
         self.reset_calls = 0
+        self.reset_output_calls = 0
         self.is_open = True
 
     def write(self, data):
+        if self._write_errors:
+            err = self._write_errors.pop(0)
+            if err is not None:
+                raise err
         self.written.append(data)
         return len(data)
 
@@ -42,17 +55,22 @@ class FakeSerialPort:
     def reset_input_buffer(self):
         self.reset_calls += 1
 
+    def reset_output_buffer(self):
+        self.reset_output_calls += 1
+
     def close(self):
         self.is_open = False
 
 
-def make_mono(replies, filter_position=3):
+def make_mono(replies, filter_position=3, write_errors=None):
     """
     Build a Cornerstone130 bypassing __init__ (no real serial port), with
     its _com swapped for a FakeSerialPort scripted with `replies` --
     raw bytes as Cornerstone130.read() would receive them, one per
-    read_until() call. `filter_position` seeds self.filter directly
-    (normally set from a real filter_wheel_position query in __init__).
+    read_until() call -- and optionally `write_errors`, exceptions (or
+    None for a normal send) raised on successive write() calls instead.
+    `filter_position` seeds self.filter directly (normally set from a
+    real filter_wheel_position query in __init__).
     """
     mono = Cornerstone130.__new__(Cornerstone130)
     mono.port = "COMFAKE"
@@ -60,15 +78,16 @@ def make_mono(replies, filter_position=3):
     mono.encoding = "utf-8"
     mono.grating_change_nm = 850
     mono.filter = filter_position
-    mono._com = FakeSerialPort(replies)
+    mono._com = FakeSerialPort(replies, write_errors=write_errors)
     return mono
 
 
-class WriteFlushesInputBufferTests(unittest.TestCase):
-    def test_write_flushes_before_every_send(self):
+class WriteFlushesBuffersTests(unittest.TestCase):
+    def test_write_flushes_input_and_output_before_every_send(self):
         mono = make_mono([b"OK\r\n"])
         mono.command("abort")
         self.assertEqual(mono._com.reset_calls, 1)
+        self.assertEqual(mono._com.reset_output_calls, 1)
 
 
 class CommandRetryTests(unittest.TestCase):
@@ -84,6 +103,27 @@ class CommandRetryTests(unittest.TestCase):
         self.assertEqual(len(mono._com.written), 2)
         # write() flushes before each send, including the retry.
         self.assertEqual(mono._com.reset_calls, 2)
+
+    def test_retries_once_on_write_timeout(self):
+        # Confirmed on real hardware (2026-11-02): the write() call
+        # itself can raise SerialTimeoutException, not just a slow read.
+        mono = make_mono(
+            [b"OK\r\n"],
+            write_errors=[serial.SerialTimeoutException("Write timeout")],
+        )
+        self.assertEqual(mono.command("abort"), "OK")
+        self.assertEqual(len(mono._com.written), 1)
+
+    def test_raises_after_two_write_timeouts(self):
+        mono = make_mono(
+            [],
+            write_errors=[
+                serial.SerialTimeoutException("Write timeout"),
+                serial.SerialTimeoutException("Write timeout"),
+            ],
+        )
+        with self.assertRaises(MonochromatorCommError):
+            mono.command("abort")
 
     def test_raises_after_two_empty_replies(self):
         mono = make_mono([b"", b""])
@@ -109,6 +149,14 @@ class QueryRetryTests(unittest.TestCase):
         mono = make_mono([b"", b"", b"", b""])
         with self.assertRaises(MonochromatorCommError):
             mono.query("wave")
+
+    def test_retries_once_on_write_timeout(self):
+        mono = make_mono(
+            [b"WAVE?\r\n", b"550.000\r\n"],
+            write_errors=[serial.SerialTimeoutException("Write timeout")],
+        )
+        resp = mono.query("wave")
+        self.assertEqual(resp.response, "550.000")
 
 
 class QueryNumericRetryTests(unittest.TestCase):

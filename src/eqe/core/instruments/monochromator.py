@@ -61,22 +61,26 @@ class Cornerstone130:
         self._com.close()
 
     def write(self, msg: str) -> int:
-        # Discard anything already sitting in the input buffer before
-        # sending a new command. In a correctly-synced exchange nothing
-        # should be there -- every earlier command()/query() call's own
-        # read(s) already blocked until they consumed a full
-        # terminator-delimited line (or gave up after the serial
-        # timeout). If something IS there anyway -- a short/garbled
-        # reply, or leftover bytes from an earlier comms hiccup --
-        # leaving it would get it misread as part of *this* command's
-        # response, permanently shifting every later read for the rest
-        # of the session instead of just this one call being affected.
-        # Confirmed on real hardware (2026-11-02): once one query got an
-        # empty/garbled reply, every subsequent command kept reading
-        # stale leftover text (e.g. a prior shutter command's own
-        # echo) and crashing with an unrelated-looking ValueError.
+        # Discard anything already sitting in the input or output buffer
+        # before sending a new command. In a correctly-synced exchange
+        # nothing should be in the input buffer -- every earlier
+        # command()/query() call's own read(s) already blocked until
+        # they consumed a full terminator-delimited line (or gave up
+        # after the serial timeout). If something IS there anyway -- a
+        # short/garbled reply, or leftover bytes from an earlier comms
+        # hiccup -- leaving it would get it misread as part of *this*
+        # command's response, permanently shifting every later read for
+        # the rest of the session instead of just this one call being
+        # affected. Confirmed on real hardware (2026-11-02): once one
+        # query got an empty/garbled reply, every subsequent command
+        # kept reading stale leftover text (e.g. a prior shutter
+        # command's own echo) and crashing with an unrelated-looking
+        # ValueError. The output buffer is flushed too, so a byte-level
+        # write timeout that only got part of a previous message out
+        # (see below) can't have the rest of it trail into this send.
         try:
             self._com.reset_input_buffer()
+            self._com.reset_output_buffer()
         except Exception:
             pass
         msg += self.term_chars
@@ -92,17 +96,27 @@ class Cornerstone130:
         args = map(str, args)
         msg = cmd + " " + " ".join(args)
         resp = ""
+        last_error = None
         for attempt in range(2):
-            self.write(msg)
-            resp = self.read().rstrip()
+            try:
+                self.write(msg)
+                resp = self.read().rstrip()
+            except serial.SerialException as e:
+                # e.g. SerialTimeoutException from a write that didn't
+                # complete in time -- confirmed on real hardware
+                # (2026-11-02). write() flushes both buffers again on
+                # retry, in case this one left a partial message queued.
+                last_error = e
+                resp = ""
+                continue
             if resp:
                 return resp
             # Empty reply -- nothing arrived within the serial read
-            # timeout. One retry (write() flushes the input buffer
-            # again first) recovers from a one-off hiccup.
+            # timeout. One retry (write() flushes the buffers again
+            # first) recovers from a one-off hiccup.
         raise MonochromatorCommError(
             f"No reply from monochromator on {self.port} to {msg!r} "
-            f"after retrying."
+            f"after retrying." + (f" ({last_error})" if last_error else "")
         )
 
     def query(self, msg: str) -> Response:
@@ -110,16 +124,23 @@ class Cornerstone130:
             msg += "?"
 
         statement = response = ""
+        last_error = None
         for attempt in range(2):
-            self.write(msg)
-            statement = self.read().rstrip()
-            response = self.read().rstrip()
+            try:
+                self.write(msg)
+                statement = self.read().rstrip()
+                response = self.read().rstrip()
+            except serial.SerialException as e:
+                last_error = e
+                statement = response = ""
+                continue
             if statement and response:
                 return Response(statement=statement, response=response)
         raise MonochromatorCommError(
             f"No usable reply from monochromator on {self.port} to "
             f"{msg!r} after retrying (got statement={statement!r}, "
             f"response={response!r})."
+            + (f" ({last_error})" if last_error else "")
         )
 
     def _query_numeric(self, msg: str, parse):

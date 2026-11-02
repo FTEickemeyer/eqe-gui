@@ -147,6 +147,27 @@ class ExplodingBiasCurrentMeter(FakeBiasCurrentMeter):
         return self.value
 
 
+class FailingFirstShutterMonochromator(FakeMonochromator):
+    """
+    Raises on its first shutter() call only, then behaves normally --
+    models the real-hardware SerialTimeoutException confirmed
+    2026-11-02 from mono.shutter(True) at the very start of
+    perform_measurement(), which used to run before any try/finally was
+    in scope (see measurement_engine.py) and so skipped all cleanup
+    entirely: bias never reset, test-cell output never disabled.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.shutter_calls = 0
+
+    def shutter(self, close):
+        self.shutter_calls += 1
+        if self.shutter_calls == 1:
+            raise RuntimeError("simulated write timeout")
+        super().shutter(close)
+
+
 # ---------------------------------------------------------------------
 # Engine tests: it must operate on roles only, never on instrument type
 # ---------------------------------------------------------------------
@@ -293,6 +314,43 @@ class PerformMeasurementRoleAgnosticTests(unittest.TestCase):
         # Even though the loop raised, cleanup in `finally` must have run.
         self.assertEqual(test_meter.bias_voltage, 0.0)
         self.assertFalse(test_meter.output_enabled)
+
+    def test_cleanup_runs_even_if_initial_shutter_call_raises(self):
+        """
+        Regression test (2026-11-02): mono.shutter(True) at the very
+        start of perform_measurement() used to run before the
+        try/finally even began, so a real-hardware write timeout there
+        skipped cleanup entirely. It must now be covered by the same
+        try/finally as the rest of the scan.
+        """
+        mono = FailingFirstShutterMonochromator()
+        reference_meter = FakeCurrentMeter()
+        test_meter = FakeBiasCurrentMeter()
+        hardware = MeasurementHardware(
+            reference_meter=reference_meter, test_meter=test_meter, monochromator=mono
+        )
+
+        df_incbeamcurr = self._calibration_df(range(400, 411, 10))
+
+        with self.assertRaises(RuntimeError):
+            perform_measurement(
+                hardware,
+                df_incbeamcurr,
+                calibration_measurement=False,
+                nm_lim=(400, 410),
+                delta_nm=10,
+                bias_enabled=True,
+                bias_voltage=0.5,
+            )
+
+        # Cleanup must have run despite the very first instrument call
+        # raising, before the measurement loop ever got to do anything.
+        self.assertEqual(test_meter.bias_voltage, 0.0)
+        self.assertFalse(test_meter.output_enabled)
+        # The finally block's own shutter(False) attempt is the 2nd call
+        # overall and succeeds (only the 1st call raises).
+        self.assertEqual(mono.shutter_calls, 2)
+        self.assertFalse(mono.shutter_closed)
 
 
 class NegativeIPCEWarningTests(unittest.TestCase):
