@@ -37,10 +37,15 @@ class SessionPanel(QWidget):
 
     # Signals emitted to the outside world (MainWindow)
     mode_changed = Signal(str)
+    connect_clicked = Signal()
     start_clicked = Signal()
     stop_clicked = Signal()
     save_clicked = Signal()
     user_changed = Signal(str)
+    # Emitted when the Shutter checkbox is toggled by hand (see
+    # set_shutter_controls_enabled()/set_shutter_checked(), which change
+    # it programmatically via blockSignals and so do NOT re-emit this).
+    shutter_toggled = Signal(bool)
     # Emitted whenever admin mode is unlocked or relocked (see
     # _on_admin_toggled()) -- not tied to the user field at all, so a
     # listener should treat this as an independent trigger to re-check
@@ -125,6 +130,26 @@ class SessionPanel(QWidget):
         # unless admin mode is unlocked, so they don't show up (or get
         # accidentally toggled) in normal lab use.
         self._update_simulation_visibility()
+
+        # --------------------------------------------------
+        # Manual hardware connect + shutter control
+        # --------------------------------------------------
+        # Independent of running a measurement -- see mainwindow_qt.py's
+        # _on_connect()/_on_shutter_toggled(). The Shutter checkbox
+        # starts disabled: it only means something once instruments are
+        # actually connected (via Connect, or implicitly by Start), and
+        # MainWindow disables it again for the duration of any
+        # measurement so it can never race with the engine's own
+        # shutter control during a scan/live run.
+
+        self.connect_button = QPushButton("Connect")
+        layout.addWidget(self.connect_button)
+        self.connect_button.clicked.connect(self.connect_clicked.emit)
+
+        self.shutter_checkbox = QCheckBox("Shutter open")
+        self.shutter_checkbox.setEnabled(False)
+        layout.addWidget(self.shutter_checkbox)
+        self.shutter_checkbox.toggled.connect(self.shutter_toggled.emit)
 
         # --------------------------------------------------
         # Run control buttons
@@ -298,3 +323,22 @@ class SessionPanel(QWidget):
         """
 
         return self.autosave_checkbox.isChecked()
+
+    def set_shutter_controls_enabled(self, enabled: bool):
+        """
+        Enable/disable the Shutter checkbox -- see mainwindow_qt.py's
+        _sync_shutter_control(), called once instruments are connected
+        (enable) and around a measurement (disable, since the engine
+        takes over shutter control for its duration).
+        """
+        self.shutter_checkbox.setEnabled(enabled)
+
+    def set_shutter_checked(self, checked: bool):
+        """
+        Reflect the monochromator's actual current shutter state without
+        re-emitting shutter_toggled (this is MainWindow syncing the
+        display to hardware, not a user action to act on again).
+        """
+        self.shutter_checkbox.blockSignals(True)
+        self.shutter_checkbox.setChecked(checked)
+        self.shutter_checkbox.blockSignals(False)

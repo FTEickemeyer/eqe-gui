@@ -17,8 +17,25 @@ class SimulatedMonochromator:
         if on_status is not None:
             on_status(f"Simulated monochromator moved to {nm} nm")
 
-    def shutter(self, open_: bool):
-        self.shutter_open = open_
+    def shutter(self, close: bool = True):
+        """
+        Matches Cornerstone130.shutter()'s signature/semantics exactly
+        (close=True closes it) -- previously took `open_` with the
+        opposite meaning, a latent mismatch that didn't matter while
+        every caller passed a bare positional bool (True/False read the
+        same regardless of the param name), but would have silently
+        inverted the shutter state under a keyword call like
+        `shutter(close=...)` (see mainwindow_qt.py's manual Shutter
+        control). shutter_open itself still isn't read anywhere in the
+        simulated current-generation model, so this has no effect on
+        simulated readings either way -- it only matters for a caller
+        that queries `shuttered` or passes a keyword argument.
+        """
+        self.shutter_open = not close
+
+    @property
+    def shuttered(self) -> bool:
+        return not self.shutter_open
 
     def close(self):
         self.shutter_open = False

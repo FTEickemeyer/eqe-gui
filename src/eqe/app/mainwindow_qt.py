@@ -453,9 +453,20 @@ class MainWindow(QMainWindow):
                 },
             )
 
-            
+            # The measurement thread is now running (is_measuring is set
+            # synchronously inside run_measurement_async(), before this
+            # call returns) -- disable manual Shutter control for its
+            # duration so it can't race with the engine's own shutter
+            # calls; re-enabled in on_measurement_finished().
+            self._sync_shutter_control()
+
         except Exception as exc:
             self.log_panel.append(f"ERROR: {exc}")
+            # Starting failed (e.g. a validation error) before or
+            # without ever reaching run_measurement_async() -- re-sync
+            # rather than leaving the Shutter control stuck disabled
+            # from a previous run that did succeed.
+            self._sync_shutter_control()
 
 
     def _on_stop(self):
@@ -463,6 +474,74 @@ class MainWindow(QMainWindow):
         self.controller.stop_measurement()
 
         self.log_panel.append("Stop requested")
+
+
+    def _on_connect(self):
+        """
+        Explicit, lightweight hardware connection step (Connect button) --
+        lets the manual Shutter control be used without first running a
+        full measurement. Reuses connect_instruments() exactly as
+        _on_start() does (same args), so connecting here and then
+        clicking Start afterward correctly reuses this same connection
+        rather than reconnecting -- see connect_instruments()'s
+        simulate/simulate_profile match check. Does not touch Advanced
+        Acquisition Settings or dark current -- _on_start() still does
+        both of those itself on every run, unaffected by whether this
+        ran first.
+        """
+        try:
+            self.controller.connect_instruments(
+                mono=None,
+                smu=None,
+                N=500,
+                nplc=0.01,
+                interval=0.002,
+                simulate=self.session_panel.sim_checkbox.isChecked(),
+                simulate_profile=self.session_panel.sim_profile_combo.currentText(),
+            )
+        except Exception as exc:
+            self.log_panel.append(f"Connect failed: {exc}")
+            return
+
+        self.log_panel.append("Instruments connected.")
+        self._sync_shutter_control()
+
+    def _sync_shutter_control(self):
+        """
+        Enable the Shutter control once instruments are connected (and
+        no measurement is running -- the engine takes over shutter
+        control for its own duration, see _on_start()/
+        on_measurement_finished()), and reflect the monochromator's
+        actual current state rather than assuming one. Cheap and safe
+        to call any time hardware/measurement state might have changed.
+        """
+        mono = self.controller.mono
+        enabled = mono is not None and not self.controller.is_measuring
+        self.session_panel.set_shutter_controls_enabled(enabled)
+
+        if mono is not None:
+            try:
+                self.session_panel.set_shutter_checked(not mono.shuttered)
+            except Exception:
+                pass
+
+    def _on_shutter_toggled(self, checked):
+        """
+        Manual shutter open/close (Shutter checkbox) -- only reachable
+        while no measurement is running (see _sync_shutter_control(),
+        which disables it otherwise), so this can never race with the
+        engine's own shutter(...) calls during a scan/live run, which
+        must stay in full control of the shutter for that duration.
+        """
+        mono = self.controller.mono
+        if mono is None:
+            return
+
+        try:
+            mono.shutter(close=not checked)
+            self.log_panel.append(f"Shutter {'opened' if checked else 'closed'} manually.")
+        except Exception as exc:
+            self.log_panel.append(f"Failed to set shutter: {exc}")
 
 
     def _on_save(self):
@@ -893,6 +972,12 @@ class MainWindow(QMainWindow):
 
         self.log_panel.append("Measurement finished")
 
+        # Re-enable manual Shutter control now that the engine is done
+        # with it -- its own cleanup always leaves the shutter open (see
+        # measurement_engine.py's finally block), reflected here rather
+        # than assumed.
+        self._sync_shutter_control()
+
 
     def update_mode_visibility(self, mode):
         """
@@ -968,9 +1053,11 @@ class MainWindow(QMainWindow):
 
         # Connect signals
         self.session_panel.mode_changed.connect(self._on_mode_changed)
+        self.session_panel.connect_clicked.connect(self._on_connect)
         self.session_panel.start_clicked.connect(self._on_start)
         self.session_panel.stop_clicked.connect(self._on_stop)
         self.session_panel.save_clicked.connect(self._on_save)
+        self.session_panel.shutter_toggled.connect(self._on_shutter_toggled)
         self.session_panel.mmf_clicked.connect(self._on_mmf)
         self.session_panel.about_clicked.connect(self._on_about)
 
