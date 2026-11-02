@@ -161,6 +161,9 @@ class SessionPanel(QWidget):
         layout.addWidget(self.stop_button)
 
         self.save_button = QPushButton("Save")
+        # Saves the last *completed* measurement -- disabled while one is
+        # running (see mainwindow_qt.py's _on_start()/
+        # on_measurement_finished(), same lockstep as Stop).
         layout.addWidget(self.save_button)
 
         self.autosave_checkbox = QCheckBox("Autosave")

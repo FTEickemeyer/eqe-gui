@@ -481,8 +481,11 @@ class MainWindow(QMainWindow):
             # reach _on_start() while a measurement is running. Stop is
             # the mirror image -- only meaningful once something is
             # actually running -- re-disabled in on_measurement_finished().
+            # Save is disabled too: it saves the last *completed* result,
+            # and the one it would save is now stale.
             self.session_panel.start_button.setEnabled(False)
             self.session_panel.stop_button.setEnabled(True)
+            self.session_panel.save_button.setEnabled(False)
 
         except Exception as exc:
             self.log_panel.append(f"ERROR: {exc}")
@@ -973,11 +976,12 @@ class MainWindow(QMainWindow):
         # than assumed.
         self._sync_shutter_control()
 
-        # Re-enable Start and disable Stop now that the previous run is
-        # fully done (see _on_start(), which sets them the other way
-        # round for the run's duration).
+        # Re-enable Start and Save, and disable Stop, now that the
+        # previous run is fully done (see _on_start(), which sets them
+        # the other way round for the run's duration).
         self.session_panel.start_button.setEnabled(True)
         self.session_panel.stop_button.setEnabled(False)
+        self.session_panel.save_button.setEnabled(True)
 
 
     def update_mode_visibility(self, mode):
