@@ -209,7 +209,19 @@ reconfiguring, before trusting the "real" reading — same pattern as the 2400's
 autorange settle(), just triggered by a function/range reconfigure instead of a signal
 jump. This was the actual cause of a real, previously mysterious "calibration measures
 fine, but the EQE scan right after doesn't match" bug that looked at first like a bad
-calibration measurement.
+calibration measurement. `_on_start()` now also rejects a second Start click
+immediately (added 2026-11-02) if `controller.is_measuring` is already true, and
+disables the Start button for a run's duration (re-enabled in
+`on_measurement_finished()`) — confirmed on real hardware that without this, a
+double-click during Live Monitoring let the second click's setup code (reconfiguring
+the reference meter, recapturing dark current) run real serial I/O on the same shared
+instrument connection the first, still-running measurement thread was actively using;
+the two threads' concurrent reads/writes desynced the monochromator's request/response
+framing and crashed with an unrelated-looking `ValueError` from a garbled reply, after
+which the serial connection was left in a bad state. `run_measurement_async()`'s own
+"already running" `RuntimeError` guard still exists but fires too late on its own —
+after that hardware I/O already happened — so the real fix had to be earlier, in the
+GUI.
 
 Note: the reference meter's "Current (direct)"/"Voltage (shunt)" mode (see
 keithley2000.py's `mode`) is a *software* setting that must match the instrument's

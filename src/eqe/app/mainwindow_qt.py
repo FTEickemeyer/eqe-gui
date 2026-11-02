@@ -249,6 +249,22 @@ class MainWindow(QMainWindow):
         - start controller.run_measurement_async(...)
         """
 
+        # Reject a second Start while a measurement is already running,
+        # before doing anything else. run_measurement_async() has its own
+        # "already running" guard, but it's too late on its own: everything
+        # above it in this method (connect_instruments() reconfiguring the
+        # reference meter, recapturing dark current) already does real
+        # serial/VISA I/O on the same shared instrument connection the
+        # first, still-running measurement thread is actively using --
+        # confirmed on real hardware to desync the monochromator's
+        # request/response framing (a later read got back garbage instead
+        # of a clean reply) and crash with an unrelated-looking
+        # ValueError. Checking here instead avoids that I/O happening at
+        # all for the rejected second click.
+        if self.controller.is_measuring:
+            self.log_panel.append("ERROR: A measurement is already running.")
+            return
+
         # Collect full config (NEW)
         config = self.collect_measurement_config()
 
@@ -459,6 +475,11 @@ class MainWindow(QMainWindow):
             # duration so it can't race with the engine's own shutter
             # calls; re-enabled in on_measurement_finished().
             self._sync_shutter_control()
+
+            # Belt-and-suspenders on top of the is_measuring guard above:
+            # grey out Start itself too, so a second click can't even
+            # reach _on_start() while a measurement is running.
+            self.session_panel.start_button.setEnabled(False)
 
         except Exception as exc:
             self.log_panel.append(f"ERROR: {exc}")
@@ -948,6 +969,10 @@ class MainWindow(QMainWindow):
         # measurement_engine.py's finally block), reflected here rather
         # than assumed.
         self._sync_shutter_control()
+
+        # Re-enable Start now that the previous run is fully done (see
+        # _on_start(), which disables it for the run's duration).
+        self.session_panel.start_button.setEnabled(True)
 
 
     def update_mode_visibility(self, mode):
