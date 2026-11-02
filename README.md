@@ -155,6 +155,13 @@ control of the shutter while it's running (closed between wavelength moves, open
 each reading), so the manual control can never fight it; it re-enables once the
 measurement finishes, reflecting whatever the shutter's actual state is left at.
 
+Clicking **Start** always forces the shutter open right after connecting, regardless
+of whatever it was left at — including on the very first Start of a session, which is
+also the first point the instruments connect at all. (Real hardware only: the
+dark-current recapture that follows briefly closes it again to get a true no-light
+reading, and the measurement itself keeps managing it as above once it's running —
+neither changes this starting guarantee.)
+
 ### Admin mode
 
 Calibration measurement and editing Advanced Acquisition Settings are admin-only.

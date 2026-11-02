@@ -143,6 +143,11 @@ class SessionPanel(QWidget):
 
         self.shutter_checkbox = QCheckBox("Shutter open")
         self.shutter_checkbox.setEnabled(False)
+        # Purely cosmetic until a connection exists (the control is
+        # disabled until then) -- matches the real default applied once
+        # one does: mainwindow_qt.py's _on_start() always forces the
+        # actual shutter open right after connecting.
+        self.shutter_checkbox.setChecked(True)
         layout.addWidget(self.shutter_checkbox)
         self.shutter_checkbox.toggled.connect(self.shutter_toggled.emit)
 

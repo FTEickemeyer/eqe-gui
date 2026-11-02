@@ -362,6 +362,24 @@ class MainWindow(QMainWindow):
                 simulate_profile=self.session_panel.sim_profile_combo.currentText(),
             )
 
+            # The shutter always starts open: on the very first Start of
+            # the session (the only point instruments ever connect --
+            # there's no separate connect step), and on every Start
+            # after that too, regardless of whatever the manual Shutter
+            # checkbox was left at. Deliberately unguarded: if this
+            # fails, aborting Start (via the except block below) is
+            # safer than proceeding into a scan that would read zero
+            # signal. Downstream steps still manage the shutter for
+            # their own reasons afterward -- the real-hardware dark-
+            # current recapture below closes it again (dark current
+            # must be measured with no light), and the measurement
+            # engine itself closes it while moving between wavelengths
+            # and opens it per reading -- neither of those is affected
+            # by this just being the guaranteed starting point.
+            self.controller.mono.shutter(close=False)
+            self.log_panel.append("Shutter opened.")
+            self._sync_shutter_control()
+
             # --------------------------------------------------
             # Apply Advanced Acquisition Settings to the (possibly reused,
             # already-connected) reference meter -- instrument connections
