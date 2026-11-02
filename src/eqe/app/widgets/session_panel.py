@@ -37,7 +37,6 @@ class SessionPanel(QWidget):
 
     # Signals emitted to the outside world (MainWindow)
     mode_changed = Signal(str)
-    connect_clicked = Signal()
     start_clicked = Signal()
     stop_clicked = Signal()
     save_clicked = Signal()
@@ -132,19 +131,15 @@ class SessionPanel(QWidget):
         self._update_simulation_visibility()
 
         # --------------------------------------------------
-        # Manual hardware connect + shutter control
+        # Manual shutter control
         # --------------------------------------------------
         # Independent of running a measurement -- see mainwindow_qt.py's
-        # _on_connect()/_on_shutter_toggled(). The Shutter checkbox
-        # starts disabled: it only means something once instruments are
-        # actually connected (via Connect, or implicitly by Start), and
-        # MainWindow disables it again for the duration of any
-        # measurement so it can never race with the engine's own
-        # shutter control during a scan/live run.
-
-        self.connect_button = QPushButton("Connect")
-        layout.addWidget(self.connect_button)
-        self.connect_button.clicked.connect(self.connect_clicked.emit)
+        # _on_shutter_toggled(). The Shutter checkbox starts disabled: it
+        # only means something once instruments are actually connected,
+        # which happens as a side effect of Start (there is no separate
+        # connect step), and MainWindow disables it again for the
+        # duration of any measurement so it can never race with the
+        # engine's own shutter control during a scan/live run.
 
         self.shutter_checkbox = QCheckBox("Shutter open")
         self.shutter_checkbox.setEnabled(False)

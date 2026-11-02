@@ -476,41 +476,12 @@ class MainWindow(QMainWindow):
         self.log_panel.append("Stop requested")
 
 
-    def _on_connect(self):
-        """
-        Explicit, lightweight hardware connection step (Connect button) --
-        lets the manual Shutter control be used without first running a
-        full measurement. Reuses connect_instruments() exactly as
-        _on_start() does (same args), so connecting here and then
-        clicking Start afterward correctly reuses this same connection
-        rather than reconnecting -- see connect_instruments()'s
-        simulate/simulate_profile match check. Does not touch Advanced
-        Acquisition Settings or dark current -- _on_start() still does
-        both of those itself on every run, unaffected by whether this
-        ran first.
-        """
-        try:
-            self.controller.connect_instruments(
-                mono=None,
-                smu=None,
-                N=500,
-                nplc=0.01,
-                interval=0.002,
-                simulate=self.session_panel.sim_checkbox.isChecked(),
-                simulate_profile=self.session_panel.sim_profile_combo.currentText(),
-            )
-        except Exception as exc:
-            self.log_panel.append(f"Connect failed: {exc}")
-            return
-
-        self.log_panel.append("Instruments connected.")
-        self._sync_shutter_control()
-
     def _sync_shutter_control(self):
         """
-        Enable the Shutter control once instruments are connected (and
-        no measurement is running -- the engine takes over shutter
-        control for its own duration, see _on_start()/
+        Enable the Shutter control once instruments are connected (which
+        only happens as a side effect of Start -- there is no standalone
+        connect step) and no measurement is running (the engine takes
+        over shutter control for its own duration, see _on_start()/
         on_measurement_finished()), and reflect the monochromator's
         actual current state rather than assuming one. Cheap and safe
         to call any time hardware/measurement state might have changed.
@@ -1053,7 +1024,6 @@ class MainWindow(QMainWindow):
 
         # Connect signals
         self.session_panel.mode_changed.connect(self._on_mode_changed)
-        self.session_panel.connect_clicked.connect(self._on_connect)
         self.session_panel.start_clicked.connect(self._on_start)
         self.session_panel.stop_clicked.connect(self._on_stop)
         self.session_panel.save_clicked.connect(self._on_save)

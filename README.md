@@ -20,8 +20,7 @@ external Si71889 reference cell — see [Calibration](#calibration)).
 - **Simulation mode** — runs the full GUI/measurement pipeline against simulated
   instruments, no hardware required (useful for development or demos)
 - **Manual shutter control** — open/close the monochromator's shutter by hand outside
-  of a measurement (see [Connecting instruments and the manual shutter
-  control](#connecting-instruments-and-the-manual-shutter-control))
+  of a measurement (see [Manual shutter control](#manual-shutter-control))
 
 See [CLAUDE.md](CLAUDE.md) for the internal architecture (GUI → controller →
 measurement engine → instruments) and the active development roadmap. For a
@@ -145,18 +144,16 @@ To run without hardware, enable simulation mode from the **Session** panel in th
 GUI — this swaps in `SimulatedSMU`/`SimulatedMonochromator` and lets you exercise
 scan mode, live mode, and saving without any instrument connected.
 
-### Connecting instruments and the manual shutter control
+### Manual shutter control
 
-Clicking **Start** connects the instruments automatically if they aren't already —
-there's no separate step needed for a normal measurement. The **Connect** button
-exists for one specific case: using **Shutter open** (both next to Start/Stop) to
-open or close the monochromator's shutter by hand, independently of any measurement,
-e.g. to check alignment before running a scan. Shutter open is greyed out until
-instruments are connected (via Connect, or implicitly by Start) and automatically
-greys out again for the duration of any measurement — the measurement engine takes
-full control of the shutter while it's running (closed between wavelength moves,
-open for each reading), so the manual control can never fight it; it re-enables once
-the measurement finishes, reflecting whatever the shutter's actual state is left at.
+**Shutter open** (next to Start/Stop) opens or closes the monochromator's shutter by
+hand, independently of any measurement — e.g. to check alignment between scans.
+It's greyed out until the instruments are connected, which happens as a side effect
+of clicking **Start** (there's no separate connect step), and it automatically greys
+out again for the duration of any measurement — the measurement engine takes full
+control of the shutter while it's running (closed between wavelength moves, open for
+each reading), so the manual control can never fight it; it re-enables once the
+measurement finishes, reflecting whatever the shutter's actual state is left at.
 
 ### Admin mode
 
