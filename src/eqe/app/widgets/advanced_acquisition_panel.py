@@ -23,11 +23,12 @@ Currently holds:
   the shunt is ever removed and the reference meter is rewired back to
   direct current sensing.
 
-This whole panel is developer-only (felix) to *edit* -- see
-mainwindow_qt.update_mode_visibility() -- since a wrong value here
-(especially the shunt resistance) silently corrupts every measurement
-that follows. Other users still see and are affected by whatever felix
-last configured; they just can't change it themselves.
+This whole panel is admin-only to *edit* -- see session_panel.py's
+"Admin" checkbox and mainwindow_qt.update_mode_visibility() -- since a
+wrong value here (especially the shunt resistance) silently corrupts
+every measurement that follows. Other users still see and are affected
+by whatever an admin last configured; they just can't change it
+themselves without unlocking admin mode.
 
 Any parameter added here should also get a line in io/data_io.py's
 _advanced_lines() so it's recorded in saved files' metadata header.

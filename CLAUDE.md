@@ -164,10 +164,22 @@ These rules are non-negotiable. Apply them to every change, in every file.
 | EQE Scan | Wavelength sweep, calibrated EQE, live plot | ✅ Stable, verified on real hardware |
 | Live Monitoring (Live EQE) | Fixed-wavelength continuous acquisition, changeable mid-run, real time-series save | ✅ Stable, verified on real hardware |
 | Electrical Control | SMU bias voltage + compliance, always reset to 0 V when a measurement ends | ✅ Stable |
-| Calibration measurement | Produces a new incident-beam calibration from the external Si71889 cell; felix-only for now | ✅ Stable, verified on real hardware |
-| Advanced Acquisition Settings | Stabilization time; reference-meter mode (direct current vs. voltage-across-shunt) + shunt resistance; felix-only to edit, recorded in saved metadata | ✅ Stable, verified on real hardware |
+| Calibration measurement | Produces a new incident-beam calibration from the external Si71889 cell; admin-only (see Admin mode below) | ✅ Stable, verified on real hardware |
+| Advanced Acquisition Settings | Stabilization time; reference-meter mode (direct current vs. voltage-across-shunt) + shunt resistance; admin-only to edit, recorded in saved metadata | ✅ Stable, verified on real hardware |
 | MMF (Mismatch Factor) | Standalone dialog (MMF button, session panel): picks a DUT EQE file + a reference-cell EQE file + a lamp spectrum file, computes the spectral mismatch factor and Jsc against AM1.5GT, plots all four spectra, saves a summary/plot/data-CSV trio | ✅ Implemented 2026-08-19, not yet verified on real hardware/lab files beyond this repo's own saved files |
-| Lock-in EQE / Lock-in Live EQE | Modulated-light EQE workflow | 🚧 Not implemented; menu entries felix-only |
+| Lock-in EQE / Lock-in Live EQE | Modulated-light EQE workflow | 🚧 Not implemented; menu entries admin-only |
+
+### Admin mode
+
+Calibration measurement, editing Advanced Acquisition Settings, Simulation mode, and
+the not-yet-implemented Lock-in modes are gated by `SessionPanel.is_admin()` (added
+2026-11-02, replacing a hardcoded `_DEVELOPER_USERS = {"felix"}` username check) --
+unlocked for the rest of the session via the "Admin" checkbox + a PIN
+(`session.admin_pin`, `config_default.yaml`, deliberately `null` there since that
+file is shipped/public; set in your own gitignored `config_local.yaml`). Not tied to
+any particular person's name, not persisted across launches. See
+`session_panel.py`'s `_on_admin_toggled()`/`admin_changed` signal and
+`mainwindow_qt.py`'s `update_mode_visibility()`.
 
 ---
 
@@ -179,7 +191,7 @@ Done (kept here for context, not to be redone): live mode has its own time-domai
 buffers and plot infra separate from scan mode; live-mode CSV logging of time/
 wavelength/EQE/currents; an Advanced Acquisition Settings panel exists (stabilization
 time, reference-meter mode/shunt resistance — extend it, don't replace it, for future
-acquisition parameters), felix-only to edit (see Hard Constraints); reference-cell and
+acquisition parameters), admin-only to edit (see Admin mode above); reference-cell and
 test-cell currents are now read simultaneously (added 2026-08-19, see
 `measurement_engine._measure_simultaneously` and `CurrentMeter.settle()` in
 `instruments/roles.py`) instead of sequentially, so a fluctuating Xenon lamp affects

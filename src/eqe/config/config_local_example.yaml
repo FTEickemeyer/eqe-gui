@@ -34,3 +34,12 @@ calibration:
 # startup/crash log (~/.eqe/eqe_gui.log), which always stays on.
 # logging:
 #   enabled: false
+
+# Set this to enable the "Admin" checkbox (session panel) -- unlocks
+# Calibration measurement and editing Advanced Acquisition Settings for
+# the rest of the session once the correct PIN is entered. Unset by
+# default everywhere (including this example and config_default.yaml,
+# which is shipped/public) -- pick your own value and share it
+# out-of-band with whoever should have admin access; do not commit it.
+# session:
+#   admin_pin: "changeme"

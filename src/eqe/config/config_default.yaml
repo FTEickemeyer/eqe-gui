@@ -24,6 +24,21 @@ calibration:
   active_incident_beam_file: null
   grating_change_nm: 850
 
+# Admin mode: unlocks Calibration measurement and editing Advanced
+# Acquisition Settings (see app/widgets/session_panel.py's "Admin"
+# checkbox) -- decoupled from any particular person's name, so it isn't
+# tied to whoever happens to be running this install. Deliberately
+# unset (null) here: this file is shipped/public, so there is NEVER a
+# default PIN baked in for anyone to find. Set admin_pin in your own
+# config_local.yaml (gitignored, never shipped -- see README's
+# Configuration section) to actually enable admin mode; share the PIN
+# out-of-band with whoever should have it. This is a shared-secret
+# speed bump against accidental changes by someone who doesn't know
+# it, not a real security boundary -- this is a lab-internal tool, not
+# something exposed to untrusted users.
+session:
+  admin_pin: null
+
 # Hardware configuration.
 #
 # `active_profile` selects one entry from `profiles` below; that profile is

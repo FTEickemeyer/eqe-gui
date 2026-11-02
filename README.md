@@ -103,8 +103,10 @@ and run.
 
 Create a `config_local.yaml` only if you want to override something — e.g. share
 calibration files across colleagues' accounts instead of each keeping their own, pin
-a specific incident-beam calibration file, or point at different instrument ports on
-a different PC. Two locations are checked, in this order:
+a specific incident-beam calibration file, point at different instrument ports on
+a different PC, or set the admin PIN (see [Admin mode](#admin-mode) — there is no
+default, so admin mode does nothing on a fresh install until this is set). Two
+locations are checked, in this order:
 
 | Location | When to use it |
 |---|---|
@@ -140,12 +142,22 @@ To run without hardware, enable simulation mode from the **Session** panel in th
 GUI — this swaps in `SimulatedSMU`/`SimulatedMonochromator` and lets you exercise
 scan mode, live mode, and saving without any instrument connected.
 
+### Admin mode
+
+Calibration measurement and editing Advanced Acquisition Settings are admin-only.
+Check **"Admin"** (next to the User field) and enter the PIN (`session.admin_pin` in
+`config_local.yaml` — see [Configuration](#configuration); there's no default PIN,
+so this does nothing until someone sets one) to unlock both for the rest of that
+session. Unchecking it needs no PIN. This is deliberately not tied to any particular
+person's name — anyone who knows the PIN can act as admin, and it isn't remembered
+between launches.
+
 ### Advanced Acquisition Settings
 
-This panel is greyed out (visible, but not editable) unless logged in as the
-developer user (`felix`) — a wrong value here, especially the reference meter
-settings below, silently affects every measurement that follows. All settings in
-this panel are recorded in the metadata header of saved files.
+This panel is greyed out (visible, but not editable) unless admin mode is unlocked
+(see above) — a wrong value here, especially the reference meter settings below,
+silently affects every measurement that follows. All settings in this panel are
+recorded in the metadata header of saved files.
 
 **Stabilization time** (default 100 ms) is how long the measurement waits after the
 monochromator moves to a new wavelength, before taking a reading — giving the

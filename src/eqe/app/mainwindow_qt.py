@@ -179,12 +179,12 @@ class MainWindow(QMainWindow):
             self.controller.set_live_wavelength
         )
 
-        # Calibration measurements are a developer-only feature for now --
+        # Calibration measurements are an admin-only feature for now --
         # hidden (and unchecked, so a stale checked state can't linger)
-        # unless the User field identifies a developer, same gating as
-        # Simulation and the Lock-in modes.
-        self.session_panel.user_changed.connect(self._update_calibration_visibility)
-        self._update_calibration_visibility(self.session_panel.get_user())
+        # unless admin mode is unlocked (see session_panel.py's "Admin"
+        # checkbox), same gating as Simulation and the Lock-in modes.
+        self.session_panel.admin_changed.connect(self._update_calibration_visibility)
+        self._update_calibration_visibility()
 
         # Pre-fill the sample name with the Si71889 (external calibration
         # cell) identifier when starting a calibration measurement.
@@ -193,12 +193,12 @@ class MainWindow(QMainWindow):
         )
 
 
-    def _update_calibration_visibility(self, user_text=None):
+    def _update_calibration_visibility(self, admin_unlocked=None):
         """
-        Re-run the mode-based visibility rules on a user-field change,
+        Re-run the mode-based visibility rules on an admin-mode change,
         since the Calibration / Saving panel's visibility depends on both
-        mode and developer-user status (see update_mode_visibility()) and
-        must stay correct regardless of which one just changed.
+        mode and admin status (see update_mode_visibility()) and must
+        stay correct regardless of which one just changed.
         """
 
         self.update_mode_visibility(self.session_panel.get_mode())
@@ -269,15 +269,15 @@ class MainWindow(QMainWindow):
                 wl_stop = int(self.scan_panel.stop_nm_spin.value())
                 interval = int(self.scan_panel.step_nm_spin.value())
 
-            # Calibration measurement is a scan-only, developer-only
-            # concept (records raw currents to produce a new incident-beam
+            # Calibration measurement is a scan-only, admin-only concept
+            # (records raw currents to produce a new incident-beam
             # calibration file); the checkbox is hidden for live modes
-            # (SECTION_CALIBRATION) and for non-developer users, but its
+            # (SECTION_CALIBRATION) and when admin mode is locked, but its
             # state isn't reset on mode switch, so ignore it explicitly
             # here too rather than relying on visibility alone.
             is_calibration = (
                 not is_live
-                and self.session_panel.is_developer_user()
+                and self.session_panel.is_admin()
                 and self.calibration_panel.get_values()["calibration_measurement"]
             )
 
@@ -908,24 +908,24 @@ class MainWindow(QMainWindow):
             # Show or hide the widget
             widget.setVisible(visible)
 
-        # Calibration measurements are developer-only (see
+        # Calibration measurements are admin-only (see
         # _update_calibration_visibility()), on top of the mode-based
         # SECTION_CALIBRATION rule above -- combine both constraints here
         # rather than in two independent places, since this method is
-        # re-run on both a mode change and a user-field change and must
+        # re-run on both a mode change and an admin-mode change and must
         # give the same answer either way.
-        is_dev = self.session_panel.is_developer_user()
-        self.calibration_group.setVisible(sections.get(SECTION_CALIBRATION, False) and is_dev)
-        if not is_dev:
+        is_admin = self.session_panel.is_admin()
+        self.calibration_group.setVisible(sections.get(SECTION_CALIBRATION, False) and is_admin)
+        if not is_admin:
             self.calibration_panel.calibration_measurement_checkbox.setChecked(False)
 
         # Advanced Acquisition Settings (stabilization time, reference
-        # meter mode/shunt resistance) are developer-only to *edit* --
-        # greyed out (not hidden) for everyone else, since a wrong value
-        # here (especially the shunt resistance) silently corrupts every
+        # meter mode/shunt resistance) are admin-only to *edit* -- greyed
+        # out (not hidden) for everyone else, since a wrong value here
+        # (especially the shunt resistance) silently corrupts every
         # measurement that follows, but other users still need to see
         # what's currently configured and are still affected by it.
-        self.advanced_acquisition_panel.setEnabled(is_dev)
+        self.advanced_acquisition_panel.setEnabled(is_admin)
 
         # Integrated current is only meaningful over a wavelength sweep;
         # it's structurally always 0 during live monitoring at a single

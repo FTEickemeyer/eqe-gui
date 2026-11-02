@@ -3,6 +3,7 @@ Session / Run Control panel.
 
 Contains:
 - User field
+- Admin mode checkbox (PIN-gated -- see _on_admin_toggled())
 - Measurement mode selector
 - Simulation controls
 - Start / Stop / Save buttons
@@ -19,11 +20,14 @@ from PySide6.QtWidgets import (
     QComboBox,
     QCheckBox,
     QPushButton,
+    QInputDialog,
+    QMessageBox,
 )
 from PySide6.QtCore import Signal
 
 # Import mode labels from the shared model definition
 from eqe.app.qt_models import MODE_LABELS, LOCKIN_EQE_BG, LOCKIN_LIVE_EQE
+from eqe.config.load_config import load_config
 
 
 class SessionPanel(QWidget):
@@ -37,11 +41,22 @@ class SessionPanel(QWidget):
     stop_clicked = Signal()
     save_clicked = Signal()
     user_changed = Signal(str)
+    # Emitted whenever admin mode is unlocked or relocked (see
+    # _on_admin_toggled()) -- not tied to the user field at all, so a
+    # listener should treat this as an independent trigger to re-check
+    # is_admin(), not something derivable from user_changed.
+    admin_changed = Signal(bool)
     mmf_clicked = Signal()
     about_clicked = Signal()
 
     def __init__(self):
         super().__init__()
+
+        # Not tied to any particular person's name -- unlocked for the
+        # rest of this session by entering the correct PIN (see
+        # _on_admin_toggled()), relocked on uncheck or a fresh launch.
+        # Never persisted across sessions.
+        self._admin_unlocked = False
 
         self._build_ui()
 
@@ -64,8 +79,14 @@ class SessionPanel(QWidget):
         layout.addWidget(self.user_edit)
 
         self.user_edit.textChanged.connect(self.user_changed.emit)
-        self.user_edit.textChanged.connect(self._update_simulation_visibility)
-        self.user_edit.textChanged.connect(self._update_mode_combo_for_user)
+
+        # --------------------------------------------------
+        # Admin mode (PIN-gated -- see _on_admin_toggled())
+        # --------------------------------------------------
+
+        self.admin_checkbox = QCheckBox("Admin")
+        layout.addWidget(self.admin_checkbox)
+        self.admin_checkbox.toggled.connect(self._on_admin_toggled)
 
         # --------------------------------------------------
         # Measurement mode selector
@@ -76,7 +97,7 @@ class SessionPanel(QWidget):
         self.mode_combo = QComboBox()
 
         # Lock-in modes aren't implemented yet -- keep them out of the
-        # dropdown for normal use; populated once the user field is known.
+        # dropdown for normal use; populated once admin state is known.
         self._populate_mode_combo()
 
         layout.addWidget(self.mode_combo)
@@ -101,9 +122,9 @@ class SessionPanel(QWidget):
         layout.addWidget(self.sim_profile_combo)
 
         # Simulation controls are for development use only -- hidden
-        # unless the user field identifies the developer, so they don't
-        # show up (or get accidentally toggled) in normal lab use.
-        self._update_simulation_visibility(self.user_edit.text())
+        # unless admin mode is unlocked, so they don't show up (or get
+        # accidentally toggled) in normal lab use.
+        self._update_simulation_visibility()
 
         # --------------------------------------------------
         # Run control buttons
@@ -146,19 +167,75 @@ class SessionPanel(QWidget):
         layout.addWidget(self.about_button)
         self.about_button.clicked.connect(self.about_clicked.emit)
 
-    # Users for whom development-only controls (simulation, unimplemented
-    # modes) are shown. Case-insensitive.
-    _DEVELOPER_USERS = {"felix"}
-
-    # Modes not implemented yet -- excluded from the dropdown unless the
-    # user field identifies a developer (see _DEVELOPER_USERS).
+    # Modes not implemented yet -- excluded from the dropdown unless
+    # admin mode is unlocked (see is_admin()).
     _UNIMPLEMENTED_MODES = {LOCKIN_EQE_BG, LOCKIN_LIVE_EQE}
 
-    def is_developer_user(self):
-        return self.user_edit.text().strip().lower() in self._DEVELOPER_USERS
+    def is_admin(self):
+        """
+        Whether admin-only controls (Simulation, unimplemented Lock-in
+        modes, Calibration measurement, editing Advanced Acquisition
+        Settings -- see mainwindow_qt.py's update_mode_visibility())
+        should be available right now. True only after successfully
+        entering the PIN via the Admin checkbox this session (see
+        _on_admin_toggled()) -- not tied to any particular person's
+        name, and never persisted across launches.
+        """
+        return self._admin_unlocked
 
-    def _update_simulation_visibility(self, user_text=None):
-        visible = self.is_developer_user()
+    def _on_admin_toggled(self, checked):
+        """
+        Checking "Admin" prompts for a PIN (config's session.admin_pin,
+        normally set in a local, gitignored config_local.yaml -- never
+        shipped with a default, so a fresh/public install has no
+        built-in PIN to guess). Get it right and admin mode stays
+        unlocked for the rest of this session; get it wrong, cancel, or
+        leave it unconfigured and the checkbox reverts to unchecked.
+        Unchecking it back off needs no PIN.
+        """
+        if not checked:
+            self._admin_unlocked = False
+            self._refresh_admin_gated_controls()
+            self.admin_changed.emit(self._admin_unlocked)
+            return
+
+        admin_pin = (load_config().get("session") or {}).get("admin_pin")
+        if not admin_pin:
+            QMessageBox.warning(
+                self,
+                "Admin mode",
+                "No admin PIN is configured. Set session.admin_pin in "
+                "config_local.yaml first (see README's Configuration "
+                "section) -- there is no default PIN.",
+            )
+            self.admin_checkbox.blockSignals(True)
+            self.admin_checkbox.setChecked(False)
+            self.admin_checkbox.blockSignals(False)
+            return
+
+        entered_pin, ok = QInputDialog.getText(
+            self, "Admin mode", "Enter admin PIN:", QLineEdit.EchoMode.Password
+        )
+        if ok and entered_pin == str(admin_pin):
+            self._admin_unlocked = True
+        else:
+            if ok:
+                QMessageBox.warning(self, "Admin mode", "Incorrect PIN.")
+            self.admin_checkbox.blockSignals(True)
+            self.admin_checkbox.setChecked(False)
+            self.admin_checkbox.blockSignals(False)
+            self._admin_unlocked = False
+
+        self._refresh_admin_gated_controls()
+        self.admin_changed.emit(self._admin_unlocked)
+
+    def _refresh_admin_gated_controls(self):
+        """Re-apply every admin-gated rule owned directly by this panel."""
+        self._update_simulation_visibility()
+        self._update_mode_combo_for_admin()
+
+    def _update_simulation_visibility(self):
+        visible = self.is_admin()
         self.sim_checkbox.setVisible(visible)
         self.sim_profile_combo.setVisible(visible)
         if not visible:
@@ -167,13 +244,13 @@ class SessionPanel(QWidget):
     def _populate_mode_combo(self):
         """
         (Re)build the mode dropdown, excluding not-yet-implemented modes
-        unless the current user is a developer. Preserves the current
-        selection where possible; falls back to the first available mode
-        if the selected one just got filtered out.
+        unless admin mode is unlocked. Preserves the current selection
+        where possible; falls back to the first available mode if the
+        selected one just got filtered out.
         """
 
         previous_mode = self.mode_combo.currentData() if self.mode_combo.count() else None
-        include_unimplemented = self.is_developer_user()
+        include_unimplemented = self.is_admin()
 
         self.mode_combo.blockSignals(True)
         self.mode_combo.clear()
@@ -186,7 +263,7 @@ class SessionPanel(QWidget):
         self.mode_combo.setCurrentIndex(restored_index if restored_index >= 0 else 0)
         self.mode_combo.blockSignals(False)
 
-    def _update_mode_combo_for_user(self, user_text=None):
+    def _update_mode_combo_for_admin(self):
         self._populate_mode_combo()
         # Rebuilding doesn't emit currentIndexChanged (signals were
         # blocked); tell listeners explicitly in case the selection
